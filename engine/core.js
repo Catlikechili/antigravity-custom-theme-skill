@@ -368,6 +368,43 @@
       syncPrebakedGlass(null);
     }
 
+    const sidePanelCss = st.wpEnabled ? `
+      /* Frosted pre-baked glass + dark reading scrim for right-side Artifact / Text / Diff split panels */
+      ${useUnifiedGlass ? `
+      .agy-shell[data-agy-side-glass="1"]::before {
+        clip-path: polygon(
+          evenodd,
+          0 0,
+          100% 0,
+          100% var(--agy-hdr-h, 75px),
+          var(--agy-sidebar-w, 256px) var(--agy-hdr-h, 75px),
+          var(--agy-sidebar-w, 256px) 100%,
+          0 100%,
+          0 0,
+          var(--agy-side-l, 100%) var(--agy-side-t, 75px),
+          var(--agy-side-r, 100%) var(--agy-side-t, 75px),
+          var(--agy-side-r, 100%) var(--agy-side-b, 100%),
+          var(--agy-side-l, 100%) var(--agy-side-b, 100%),
+          var(--agy-side-l, 100%) var(--agy-side-t, 75px)
+        ) !important;
+      }
+      ` : ''}
+      body:not([data-has-browser-hole="true"]) .agy-shell [data-side-panel-body="true"]:not([data-has-browser-hole="true"]):not(:has([data-browser-hole]:not([data-browser-hole="false"]))) {
+        background: ${mainTheme.aiCardBg || `rgba(${overlayRgb}, 0.72)`} !important;
+        backdrop-filter: none !important;
+        border-left: 1px solid ${mainTheme.aiCardBorder || 'rgba(255, 255, 255, 0.14)'} !important;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+      }
+      body:not([data-has-browser-hole="true"]) .agy-shell [data-side-panel-body="true"]:not([data-has-browser-hole="true"]):not(:has([data-browser-hole]:not([data-browser-hole="false"]))) pre {
+        background: rgba(${overlayRgb}, 0.56) !important;
+        border: 1px solid ${mainTheme.aiCardBorder || 'rgba(255, 255, 255, 0.14)'} !important;
+        border-radius: 10px !important;
+      }
+      .agy-shell [data-side-panel-body="true"] :is(h1, h2, h3, h4) {
+        text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+      }
+    ` : '';
+
     const headerCss = mainTheme.headerBg ? `
       /* Frosted top titlebar & seamless L-shaped unified glass (zero live backdrop-filter) */
       ${useUnifiedGlass ? `
@@ -468,6 +505,7 @@
       }
       ${sidebarEnhanceCss}
       ${aiCardCss}
+      ${sidePanelCss}
       ${headerCss}
 
       /* "+ New Conversation" button glow */
@@ -1131,12 +1169,38 @@
           `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${l}px ${t}px, ${r}px ${t}px, ${r}px ${b}px, ${l}px ${b}px, ${l}px ${t}px)`
         );
         shell.dataset.agyHoleActive = '1';
+        delete shell.dataset.agySideGlass;
         return;
       }
     }
     window.__AGY_HOLE_EL__ = null;
     delete shell.dataset.agyHoleActive;
     shell.style.removeProperty('--agy-hole-clip');
+
+    const sideBody = shell.querySelector('[data-side-panel-body="true"]');
+    if (sideBody) {
+      if (window.__AGY_SHELL_RO__ && window.__AGY_SIDE_EL__ !== sideBody) {
+        try { window.__AGY_SHELL_RO__.observe(sideBody); } catch (e) {}
+        window.__AGY_SIDE_EL__ = sideBody;
+      }
+      const sRect = sideBody.getBoundingClientRect();
+      const hasContent = sideBody.children.length > 0;
+      if (hasContent && sRect.width > 24 && sRect.height > 24 && sRect.left < shellRect.right - 8 && sRect.right > shellRect.left + 8) {
+        const sl = Math.max(sw, Math.round(sRect.left - shellRect.left));
+        const st = Math.max(hdrBottom, Math.round(sRect.top - shellRect.top));
+        const sr = Math.min(Math.round(shellRect.width), Math.max(sl, Math.round(sRect.right - shellRect.left)));
+        const sb = Math.min(Math.round(shellRect.height), Math.max(st, Math.round(sRect.bottom - shellRect.top)));
+        if (sr - sl > 20 && sb - st > 20) {
+          shell.style.setProperty('--agy-side-l', sl + 'px');
+          shell.style.setProperty('--agy-side-t', st + 'px');
+          shell.style.setProperty('--agy-side-r', sr + 'px');
+          shell.style.setProperty('--agy-side-b', sb + 'px');
+          shell.dataset.agySideGlass = '1';
+          return;
+        }
+      }
+    }
+    delete shell.dataset.agySideGlass;
   }
 
   function hookShellMetrics() {
