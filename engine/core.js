@@ -502,22 +502,32 @@
         overflow-y: hidden !important;
         padding-left: 0 !important;
         padding-right: 0 !important;
-        padding-bottom: 4px !important;
-        scrollbar-width: thin !important;
-        scrollbar-color: ${mainTheme.borderColor} transparent !important;
+        padding-bottom: 2px !important;
+        /* Keep standard scrollbar-width: auto so Chromium does not disable ::-webkit-scrollbar */
+        scrollbar-width: auto !important;
+        scrollbar-color: auto !important;
       }
       .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar,
       .agy-shell [data-testid="agent-response"] :has(> table)::-webkit-scrollbar {
-        height: 7px !important;
+        height: 8px !important;
         display: block !important;
+      }
+      .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar-track,
+      .agy-shell [data-testid="agent-response"] :has(> table)::-webkit-scrollbar-track {
+        background: ${isLight ? 'rgba(15, 23, 42, 0.06)' : 'rgba(255, 255, 255, 0.06)'} !important;
+        border-radius: 9999px !important;
       }
       .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar-thumb,
       .agy-shell [data-testid="agent-response"] :has(> table)::-webkit-scrollbar-thumb {
-        background: ${mainTheme.borderColor} !important;
+        background: ${isLight ? 'rgba(15, 23, 42, 0.34)' : 'rgba(148, 163, 184, 0.48)'} !important;
         border-radius: 9999px !important;
       }
+      .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar-thumb:hover,
+      .agy-shell [data-testid="agent-response"] :has(> table)::-webkit-scrollbar-thumb:hover {
+        background: ${isLight ? 'rgba(15, 23, 42, 0.54)' : 'rgba(148, 163, 184, 0.72)'} !important;
+      }
       .agy-shell [data-testid="agent-response"] table {
-        width: max-content !important;
+        width: 100% !important;
         min-width: 100% !important;
         max-width: none !important;
         margin: 0 !important;
@@ -525,9 +535,9 @@
         box-sizing: border-box !important;
       }
       .agy-shell [data-testid="agent-response"] :is(th, td) {
-        max-width: 260px !important;
+        max-width: none !important;
         white-space: normal !important;
-        word-break: break-word !important;
+        word-break: normal !important;
         overflow-wrap: break-word !important;
         padding: 8px 12px !important;
       }
