@@ -476,9 +476,7 @@
         overflow: hidden !important;
       }
       .agy-shell [data-testid="agent-response"] .md-table-bleed,
-      .agy-shell [data-testid="agent-response"] .md-table-host,
-      .agy-shell [data-testid="agent-response"] .md-table-frame,
-      .agy-shell [data-testid="agent-response"] :has(table) {
+      .agy-shell [data-testid="agent-response"] .md-table-host {
         width: 100% !important;
         min-width: 0 !important;
         max-width: 100% !important;
@@ -490,40 +488,48 @@
         transform: none !important;
         box-sizing: border-box !important;
       }
-      .agy-shell [data-testid="agent-response"] .md-table-frame {
-        overflow: hidden !important;
-      }
       .agy-shell [data-testid="agent-response"] .md-table-scroll,
-      .agy-shell [data-testid="agent-response"] :has(> table) {
+      .agy-shell [data-testid="agent-response"] :has(> table):not(.md-table-frame) {
         display: block !important;
         width: 100% !important;
+        min-width: 0 !important;
         max-width: 100% !important;
         overflow-x: auto !important;
         overflow-y: hidden !important;
         padding-left: 0 !important;
         padding-right: 0 !important;
         padding-bottom: 2px !important;
+        box-sizing: border-box !important;
         /* Keep standard scrollbar-width: auto so Chromium does not disable ::-webkit-scrollbar */
         scrollbar-width: auto !important;
         scrollbar-color: auto !important;
       }
+      .agy-shell [data-testid="agent-response"] .md-table-frame {
+        /* .md-table-frame sits INSIDE .md-table-scroll; forcing width:100% + overflow:hidden hid overflow from .md-table-scroll */
+        width: fit-content !important;
+        min-width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        transform: none !important;
+        box-sizing: border-box !important;
+      }
       .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar,
-      .agy-shell [data-testid="agent-response"] :has(> table)::-webkit-scrollbar {
+      .agy-shell [data-testid="agent-response"] :has(> table):not(.md-table-frame)::-webkit-scrollbar {
         height: 8px !important;
         display: block !important;
       }
       .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar-track,
-      .agy-shell [data-testid="agent-response"] :has(> table)::-webkit-scrollbar-track {
+      .agy-shell [data-testid="agent-response"] :has(> table):not(.md-table-frame)::-webkit-scrollbar-track {
         background: ${isLight ? 'rgba(15, 23, 42, 0.06)' : 'rgba(255, 255, 255, 0.06)'} !important;
         border-radius: 9999px !important;
       }
       .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar-thumb,
-      .agy-shell [data-testid="agent-response"] :has(> table)::-webkit-scrollbar-thumb {
+      .agy-shell [data-testid="agent-response"] :has(> table):not(.md-table-frame)::-webkit-scrollbar-thumb {
         background: ${isLight ? 'rgba(15, 23, 42, 0.34)' : 'rgba(148, 163, 184, 0.48)'} !important;
         border-radius: 9999px !important;
       }
       .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar-thumb:hover,
-      .agy-shell [data-testid="agent-response"] :has(> table)::-webkit-scrollbar-thumb:hover {
+      .agy-shell [data-testid="agent-response"] :has(> table):not(.md-table-frame)::-webkit-scrollbar-thumb:hover {
         background: ${isLight ? 'rgba(15, 23, 42, 0.54)' : 'rgba(148, 163, 184, 0.72)'} !important;
       }
       .agy-shell [data-testid="agent-response"] table {
