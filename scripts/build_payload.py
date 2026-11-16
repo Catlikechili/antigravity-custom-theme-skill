@@ -16,7 +16,9 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-ASSET_KEYS = ("wallpaper", "sticker", "cornerSvg")
+ASSET_KEYS = ("wallpaper", "sticker", "cornerSvg", "userAvatar", "agentAvatar")
+AVATAR_KEYS = {"userAvatar", "agentAvatar"}
+AVATAR_MAX_DIM = 256
 PLACEHOLDER = "/*__THEMES_PLACEHOLDER__*/{}"
 DEFAULT_MAX_DIM = 2560
 WEBP_QUALITY = 88
@@ -111,7 +113,8 @@ def build_payload(themes_path: Path, engine_path: Path, out_path: Path, max_dim:
         copied = dict(cfg)
         for key in ASSET_KEYS:
             if key in copied:
-                copied[key] = resolve_asset_value(copied[key], themes_dir, max_dim)
+                target_dim = min(max_dim, AVATAR_MAX_DIM) if key in AVATAR_KEYS else max_dim
+                copied[key] = resolve_asset_value(copied[key], themes_dir, target_dim)
         resolved_themes[name] = copied
 
     engine_src = engine_path.read_text(encoding="utf-8")

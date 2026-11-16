@@ -9,6 +9,8 @@
   const STORAGE_DIMMING = 'agy_dimming_v3';
   const STORAGE_WP_ENABLED = 'agy_wp_enabled_v3';
   const STORAGE_CUSTOM_WP = 'agy_custom_wp_v3';
+  const STORAGE_USER_AVATAR = 'agy_user_avatar_v3';
+  const STORAGE_AGENT_AVATAR = 'agy_agent_avatar_v3';
 
   const CHECK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
@@ -43,7 +45,39 @@
       ? localStorage.getItem(STORAGE_WP_ENABLED) !== 'false'
       : (init.wpEnabled !== undefined ? init.wpEnabled : true);
     const customWp = localStorage.getItem(STORAGE_CUSTOM_WP) || init.customWp || '';
-    return { themeName, bubbleName, inputStyle, dimming, wpEnabled, customWp };
+    const userAvatar = localStorage.getItem(STORAGE_USER_AVATAR) ?? init.userAvatar ?? '';
+    const agentAvatar = localStorage.getItem(STORAGE_AGENT_AVATAR) ?? init.agentAvatar ?? '';
+    return { themeName, bubbleName, inputStyle, dimming, wpEnabled, customWp, userAvatar, agentAvatar };
+  }
+
+  // Downscale user/agent avatar uploads to 192x192 WebP once so theme_config.json stays tiny
+  function compressAvatarFile(file, callback) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const size = 192;
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          const natW = img.naturalWidth || size;
+          const natH = img.naturalHeight || size;
+          const side = Math.min(natW, natH);
+          const sx = Math.max(0, Math.floor((natW - side) / 2));
+          const sy = Math.max(0, Math.floor((natH - side) / 2));
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+          const out = canvas.toDataURL('image/webp', 0.88);
+          callback(out && out.startsWith('data:image/webp') ? out : canvas.toDataURL('image/png'));
+        } catch (e) {
+          callback(String(reader.result || ''));
+        }
+      };
+      img.onerror = () => callback(String(reader.result || ''));
+      img.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
   }
 
   // Pre-bake L-shaped header/sidebar glass blur once per theme/dimming change to avoid per-frame GPU backdrop readback
@@ -100,6 +134,12 @@
       localStorage.setItem(STORAGE_WP_ENABLED, String(st.wpEnabled));
       if (overrides.customWp !== undefined) {
         localStorage.setItem(STORAGE_CUSTOM_WP, overrides.customWp);
+      }
+      if (overrides.userAvatar !== undefined) {
+        localStorage.setItem(STORAGE_USER_AVATAR, overrides.userAvatar);
+      }
+      if (overrides.agentAvatar !== undefined) {
+        localStorage.setItem(STORAGE_AGENT_AVATAR, overrides.agentAvatar);
       }
     } catch (e) {}
 
@@ -329,15 +369,75 @@
       ? '2px solid #78350f'
       : (bubbleTheme.innerBorder || '1px solid rgba(255, 255, 255, 0.06)');
 
-    const sidebarEnhanceCss = mainTheme.sidebarEnhanceText ? `
+    const isLight = Boolean(mainTheme.isLight);
+    const uiInk = mainTheme.uiTextColor || (isLight ? '#0f172a' : 'rgba(248, 250, 252, 0.96)');
+    const uiMutedInk = mainTheme.uiMutedColor || (isLight ? '#334155' : 'rgba(241, 245, 249, 0.92)');
+    const uiShadow = isLight ? 'none' : '0 1px 4px rgba(0, 0, 0, 0.92), 0 0 8px rgba(0, 0, 0, 0.68)';
+    const pillBg = mainTheme.pillBg || (isLight ? 'rgba(255, 255, 255, 0.78)' : 'rgba(6, 11, 24, 0.78)');
+    const pillHoverBg = mainTheme.pillHoverBg || (isLight ? 'rgba(255, 255, 255, 0.94)' : 'rgba(10, 18, 38, 0.92)');
+    const pillText = mainTheme.pillTextColor || (isLight ? '#0f172a' : '#f8fafc');
+    const pillBorder = mainTheme.pillBorder || (isLight ? 'rgba(15, 23, 42, 0.16)' : 'rgba(255, 255, 255, 0.16)');
+    const preCodeBg = isLight ? `rgba(${overlayRgb}, 0.72)` : `rgba(${overlayRgb}, 0.56)`;
+
+    const effectiveUserAvatar = st.userAvatar === 'none' ? '' : (st.userAvatar || mainTheme.userAvatar || '');
+    const effectiveAgentAvatar = st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || '');
+
+    const avatarCss = `
+      ${effectiveUserAvatar ? `
+      .agy-shell [data-testid="user-message"] {
+        position: relative !important;
+        padding-right: 42px !important;
+      }
+      .agy-shell [data-testid="user-message"]::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        bottom: 6px;
+        width: 32px;
+        height: 32px;
+        border-radius: 9999px;
+        background-image: url("${effectiveUserAvatar}");
+        background-size: cover;
+        background-position: center;
+        border: 1.5px solid ${mainTheme.primary};
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 8px ${mainTheme.glow};
+        pointer-events: none;
+      }
+      ` : ''}
+      ${effectiveAgentAvatar ? `
+      .agy-shell [data-testid="agent-response"] {
+        position: relative !important;
+        padding-left: 52px !important;
+        min-height: 50px !important;
+      }
+      .agy-shell [data-testid="agent-response"]::before {
+        content: "";
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        width: 30px;
+        height: 30px;
+        border-radius: 9999px;
+        background-image: url("${effectiveAgentAvatar}");
+        background-size: cover;
+        background-position: center;
+        border: 1.5px solid ${mainTheme.secondary || mainTheme.primary};
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 8px ${mainTheme.secondaryGlow || mainTheme.glow};
+        pointer-events: none;
+      }
+      ` : ''}
+    `;
+
+    const sidebarEnhanceCss = (mainTheme.sidebarEnhanceText || isLight) ? `
       .agy-shell .bg-sidebar a,
       .agy-shell .bg-sidebar span,
       .agy-shell .bg-sidebar button {
-        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.88);
+        color: ${isLight ? uiInk : 'inherit'};
+        text-shadow: ${isLight ? 'none' : '0 1px 3px rgba(0, 0, 0, 0.88)'};
       }
       .agy-shell .bg-sidebar .text-muted-foreground,
       .agy-shell .bg-sidebar .text-secondary-foreground {
-        color: rgba(241, 245, 249, 0.92) !important;
+        color: ${uiMutedInk} !important;
       }
     ` : '';
 
@@ -345,16 +445,23 @@
       /* Translucent reading card for AI responses (zero live backdrop-filter for max 120fps scroll) */
       .agy-shell [data-testid="agent-response"] {
         background: ${mainTheme.aiCardBg} !important;
+        ${isLight ? `color: ${uiInk} !important;` : ''}
         backdrop-filter: none !important;
-        border: 1px solid ${mainTheme.aiCardBorder || 'rgba(255, 255, 255, 0.1)'} !important;
+        border: 1px solid ${mainTheme.aiCardBorder || (isLight ? 'rgba(15, 23, 42, 0.12)' : 'rgba(255, 255, 255, 0.1)')} !important;
         border-radius: 14px !important;
         padding: 12px 16px !important;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28) !important;
+        box-shadow: ${isLight ? '0 4px 14px rgba(15, 23, 42, 0.08)' : '0 4px 14px rgba(0, 0, 0, 0.28)'} !important;
         box-sizing: border-box !important;
       }
+      ${isLight ? `
+      .agy-shell [data-main-content-body="true"],
+      .agy-shell [data-testid="agent-response"] :is(p, li, span, code, h1, h2, h3, h4, strong, td, th) {
+        color: ${uiInk};
+      }
+      ` : ''}
       .agy-shell [data-main-content-body="true"] h1,
       .agy-shell [data-main-content-body="true"] h2 {
-        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+        text-shadow: ${isLight ? 'none' : '0 2px 10px rgba(0, 0, 0, 0.85)'};
       }
     ` : '';
 
@@ -369,7 +476,7 @@
     }
 
     const sidePanelCss = st.wpEnabled ? `
-      /* Frosted pre-baked glass + dark reading scrim for right-side Artifact / Text / Diff split panels */
+      /* Frosted pre-baked glass + dark/light reading scrim for right-side Artifact / Text / Diff split panels */
       ${useUnifiedGlass ? `
       .agy-shell[data-agy-side-glass="1"]::before {
         clip-path: polygon(
@@ -391,17 +498,19 @@
       ` : ''}
       body:not([data-has-browser-hole="true"]) .agy-shell [data-side-panel-body="true"]:not([data-has-browser-hole="true"]):not(:has([data-browser-hole]:not([data-browser-hole="false"]))) {
         background: ${mainTheme.aiCardBg || `rgba(${overlayRgb}, 0.72)`} !important;
+        ${isLight ? `color: ${uiInk} !important;` : ''}
         backdrop-filter: none !important;
-        border-left: 1px solid ${mainTheme.aiCardBorder || 'rgba(255, 255, 255, 0.14)'} !important;
+        border-left: 1px solid ${mainTheme.aiCardBorder || (isLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(255, 255, 255, 0.14)')} !important;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
       }
       body:not([data-has-browser-hole="true"]) .agy-shell [data-side-panel-body="true"]:not([data-has-browser-hole="true"]):not(:has([data-browser-hole]:not([data-browser-hole="false"]))) pre {
-        background: rgba(${overlayRgb}, 0.56) !important;
-        border: 1px solid ${mainTheme.aiCardBorder || 'rgba(255, 255, 255, 0.14)'} !important;
+        background: ${preCodeBg} !important;
+        border: 1px solid ${mainTheme.aiCardBorder || (isLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(255, 255, 255, 0.14)')} !important;
         border-radius: 10px !important;
       }
       .agy-shell [data-side-panel-body="true"] :is(h1, h2, h3, h4) {
-        text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+        ${isLight ? `color: ${uiInk} !important;` : ''}
+        text-shadow: ${isLight ? 'none' : '0 1px 6px rgba(0, 0, 0, 0.85)'};
       }
     ` : '';
 
@@ -456,12 +565,12 @@
       .agy-shell [class*="@container/titlebar"] [data-testid="breadcrumb-segment"],
       .agy-shell [class*="@container/titlebar"] [data-testid="pane-titlebar-toolbar"] button,
       .agy-shell [class*="@container/titlebar"] [data-testid="pane-titlebar-toolbar"] span {
-        color: rgba(248, 250, 252, 0.96) !important;
-        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.72);
+        color: ${uiInk} !important;
+        text-shadow: ${uiShadow};
       }
       .agy-shell [class*="@container/titlebar"] [data-testid="pane-titlebar-toolbar"] button.border {
-        background: rgba(6, 11, 24, 0.36) !important;
-        border-color: rgba(255, 255, 255, 0.16) !important;
+        background: ${isLight ? 'rgba(255, 255, 255, 0.56)' : 'rgba(6, 11, 24, 0.36)'} !important;
+        border-color: ${pillBorder} !important;
       }
     ` : '';
 
@@ -506,6 +615,7 @@
       ${sidebarEnhanceCss}
       ${aiCardCss}
       ${sidePanelCss}
+      ${avatarCss}
       ${headerCss}
 
       /* "+ New Conversation" button glow */
@@ -569,18 +679,18 @@
         border: ${bubbleTheme.innerBorder || '1px solid rgba(255, 255, 255, 0.07)'} !important;
       }
 
-      /* High-contrast dark pill badges for top composer bar (No Project / Local Checkout / Branch) */
+      /* High-contrast pill badges for top composer bar (adaptive light/dark theme) */
       .surface-composer [data-testid="project-selector-trigger"],
       .surface-composer [data-testid="branch-pill-trigger"],
       .surface-composer [aria-label="Select Environment"],
       .surface-composer > :not(.surface-composer-card) [data-testid="input-box-bottom-toolbar"] button,
       .surface-composer > :not(.surface-composer-card) [data-testid="input-box-bottom-toolbar"] [role="button"] {
-        background: rgba(6, 11, 24, 0.78) !important;
-        color: #f8fafc !important;
-        border: 1px solid rgba(255, 255, 255, 0.16) !important;
+        background: ${pillBg} !important;
+        color: ${pillText} !important;
+        border: 1px solid ${pillBorder} !important;
         border-radius: 9999px !important;
         font-weight: 500 !important;
-        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35) !important;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25) !important;
         margin: 1px 2px !important;
         transition: background-color 0.15s ease, border-color 0.15s ease !important;
       }
@@ -597,20 +707,20 @@
       .surface-composer [aria-label="Select Environment"]:hover,
       .surface-composer > :not(.surface-composer-card) [data-testid="input-box-bottom-toolbar"] button:hover,
       .surface-composer > :not(.surface-composer-card) [data-testid="input-box-bottom-toolbar"] [role="button"]:hover {
-        background: rgba(10, 18, 38, 0.92) !important;
+        background: ${pillHoverBg} !important;
         border-color: ${mainTheme.borderColor} !important;
-        color: #ffffff !important;
+        color: ${pillText} !important;
       }
       .surface-composer [data-testid="project-selector-trigger"] *,
       .surface-composer [data-testid="branch-pill-trigger"] *,
       .surface-composer [aria-label="Select Environment"] *,
       .surface-composer > :not(.surface-composer-card) [data-testid="input-box-bottom-toolbar"] button *,
       .surface-composer > :not(.surface-composer-card) [data-testid="input-box-bottom-toolbar"] [role="button"] * {
-        color: #f8fafc !important;
+        color: ${pillText} !important;
       }
       .surface-composer > :not(.surface-composer-card) [data-testid="input-box-bottom-toolbar"] .ml-auto > * {
-        background: rgba(6, 11, 24, 0.72) !important;
-        color: #f8fafc !important;
+        background: ${pillBg} !important;
+        color: ${pillText} !important;
         border-radius: 9999px !important;
         padding: 2px 8px !important;
       }
@@ -657,11 +767,12 @@
 
   function syncTitleBarOverlay(stOverride) {
     const st = stOverride || getState();
+    const activeTh = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
     if (window.electronNative && typeof window.electronNative.setTitleBarOverlay === 'function') {
       try {
         window.electronNative.setTitleBarOverlay({
           color: st.wpEnabled ? '#00000000' : '#111114',
-          symbolColor: '#f8fafc'
+          symbolColor: (st.wpEnabled && activeTh.isLight) ? '#0f172a' : '#f8fafc'
         });
       } catch (e) {}
     }
@@ -768,10 +879,12 @@
   function renderThemePanels(container) {
     const st = getState();
     const mainTheme = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY];
+    const effUserAv = st.userAvatar === 'none' ? '' : (st.userAvatar || mainTheme.userAvatar || '');
+    const effAgentAv = st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || '');
 
     container.innerHTML = `
       <div id="agy-theme-scroll-container" style="padding: 24px 32px 48px 32px; max-width: 860px; margin: 0 auto; overflow-y: auto; height: 100%; color: #f4f4f5;">
-        <div style="border: 1px solid ${mainTheme.borderColor}; background: ${mainTheme.cardBg || 'rgba(22, 16, 14, 0.72)'}; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="border: 1px solid ${mainTheme.borderColor}; background: ${mainTheme.cardBg || 'rgba(22, 16, 14, 0.72)'}; border-radius: 12px; padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
               <div style="font-size: 14.5px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Wallpaper & Backdrop Dimming</div>
@@ -791,6 +904,31 @@
               <button id="agy-reset-btn" type="button" style="padding: 5px 12px; border-radius: 8px; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5; font-size: 12px; cursor: pointer; white-space: nowrap;">
                 Reset Default
               </button>
+            </div>
+          </div>
+        </div>
+
+        <div style="border: 1px solid ${mainTheme.borderColor}; background: ${mainTheme.cardBg || 'rgba(22, 16, 14, 0.72)'}; border-radius: 12px; padding: 14px 20px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <div style="font-size: 14px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Chat Avatars (User & AI Agent)</div>
+            <div style="font-size: 12px; color: #a1a1aa;">Optional circular profile badges rendered beside chat messages (auto-compressed WebP).</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div id="agy-user-av-preview" style="width: 30px; height: 30px; border-radius: 9999px; border: 1.5px solid ${mainTheme.primary}; background: rgba(255,255,255,0.06) ${effUserAv ? `url('${effUserAv}') center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effUserAv ? '' : 'U'}</div>
+              <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${mainTheme.borderColor}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                User
+                <input id="agy-user-av-upload" type="file" accept="image/*" style="display: none;" />
+              </label>
+              <button id="agy-user-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Off</button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div id="agy-agent-av-preview" style="width: 30px; height: 30px; border-radius: 9999px; border: 1.5px solid ${mainTheme.secondary || mainTheme.primary}; background: rgba(255,255,255,0.06) ${effAgentAv ? `url('${effAgentAv}') center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effAgentAv ? '' : 'AI'}</div>
+              <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${mainTheme.borderColor}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                Agent
+                <input id="agy-agent-av-upload" type="file" accept="image/*" style="display: none;" />
+              </label>
+              <button id="agy-agent-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Off</button>
             </div>
           </div>
         </div>
@@ -960,9 +1098,64 @@
       reader.readAsDataURL(file);
     });
 
+    const userAvUpload = container.querySelector('#agy-user-av-upload');
+    const userAvPreview = container.querySelector('#agy-user-av-preview');
+    const userAvClear = container.querySelector('#agy-user-av-clear');
+    const agentAvUpload = container.querySelector('#agy-agent-av-upload');
+    const agentAvPreview = container.querySelector('#agy-agent-av-preview');
+    const agentAvClear = container.querySelector('#agy-agent-av-clear');
+
+    function syncAvPreview(el, url, fallbackText) {
+      if (!el) return;
+      if (url) {
+        el.style.backgroundImage = `url("${url}")`;
+        el.style.backgroundSize = 'cover';
+        el.style.backgroundPosition = 'center';
+        el.textContent = '';
+      } else {
+        el.style.backgroundImage = 'none';
+        el.textContent = fallbackText;
+      }
+    }
+
+    if (userAvUpload) {
+      userAvUpload.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        compressAvatarFile(file, (dataUrl) => {
+          applyTheme({ userAvatar: dataUrl });
+          syncAvPreview(userAvPreview, dataUrl, 'U');
+        });
+      });
+    }
+    if (userAvClear) {
+      userAvClear.addEventListener('click', () => {
+        applyTheme({ userAvatar: 'none' });
+        syncAvPreview(userAvPreview, '', 'U');
+      });
+    }
+    if (agentAvUpload) {
+      agentAvUpload.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        compressAvatarFile(file, (dataUrl) => {
+          applyTheme({ agentAvatar: dataUrl });
+          syncAvPreview(agentAvPreview, dataUrl, 'AI');
+        });
+      });
+    }
+    if (agentAvClear) {
+      agentAvClear.addEventListener('click', () => {
+        applyTheme({ agentAvatar: 'none' });
+        syncAvPreview(agentAvPreview, '', 'AI');
+      });
+    }
+
     const resetBtn = container.querySelector('#agy-reset-btn');
     resetBtn.addEventListener('click', () => {
       localStorage.removeItem(STORAGE_CUSTOM_WP);
+      localStorage.removeItem(STORAGE_USER_AVATAR);
+      localStorage.removeItem(STORAGE_AGENT_AVATAR);
       localStorage.removeItem(STORAGE_THEME);
       localStorage.removeItem(STORAGE_BUBBLE);
       localStorage.removeItem(STORAGE_INPUT);
@@ -974,8 +1167,13 @@
         inputStyle: 'sync',
         dimming: 69,
         wpEnabled: true,
-        customWp: ''
+        customWp: '',
+        userAvatar: '',
+        agentAvatar: ''
       });
+      const defTh = THEMES[DEFAULT_THEME_KEY] || {};
+      syncAvPreview(userAvPreview, defTh.userAvatar || '', 'U');
+      syncAvPreview(agentAvPreview, defTh.agentAvatar || '', 'AI');
       if (slider) slider.value = 69;
       if (valLabel) valLabel.textContent = '69%';
       if (wpToggle) wpToggle.checked = true;

@@ -43,13 +43,18 @@
 | `sticker` | string | Optional | Asset path (`"assets/ornament.svg"`) or `data:image/svg+xml,...` above composer |
 | `stickerW`, `stickerH` | number | Optional | Rendered px width & height for `sticker` |
 | `stickerTop`, `stickerRight` | number | Optional | Offset px above/right of the composer box |
+| `userAvatar` | string | Optional | Circular avatar (`assets/...` or `data:`) rendered next to `[data-testid="user-message"]` |
+| `agentAvatar` | string | Optional | Circular avatar (`assets/...` or `data:`) rendered top-left of `[data-testid="agent-response"]` |
+| `isLight` | boolean | Optional | Enables Light Mode Glass typography (`#0f172a` ink, frosted light pills, dark window controls) |
+| `uiTextColor`, `uiMutedColor` | css color | Optional | Override header/sidebar/body primary and muted ink (defaults adapt to `isLight`) |
+| `pillBg`, `pillHoverBg`, `pillTextColor`, `pillBorder` | css color | Optional | Custom styling for composer strip pills (`No Project`, `Local Checkout`, branch trigger) |
 
 ## Asset Resolution (`scripts/build_payload.py`)
 
 When compiling `dist/theme_payload.js`:
-- Values under `wallpaper`, `sticker`, and `cornerSvg` that point to local paths (relative to `themes/`) are inlined into `data:` URIs.
+- Values under `wallpaper`, `sticker`, `cornerSvg`, `userAvatar`, and `agentAvatar` that point to local paths (relative to `themes/`) are inlined into `data:` URIs.
 - `.svg` files become URL-encoded `data:image/svg+xml,...`.
-- Raster images (`.png`, `.jpg`, `.jpeg`, `.webp`) are resized down to max `2560px` on the longest side and converted to WebP (`quality=88`) when Pillow is installed, keeping payload size ~200–600 KB.
+- Raster images (`.png`, `.jpg`, `.jpeg`, `.webp`) are resized down to max `2560px` (`256px` for `userAvatar`/`agentAvatar`) and converted to WebP (`quality=88`) when Pillow is installed, keeping payload size ~200–600 KB.
 - Leave `wallpaper` as `""` and supply `pureBg` for zero-image gradient presets (e.g. `Midnight Obsidian`).
 
 ## Antigravity UI Targets Handled by `engine/core.js`
