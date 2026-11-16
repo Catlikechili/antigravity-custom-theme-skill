@@ -475,17 +475,24 @@
         box-sizing: border-box !important;
         overflow: hidden !important;
       }
+      .agy-shell [data-testid="agent-response"] .md-table-bleed,
+      .agy-shell [data-testid="agent-response"] .md-table-host,
+      .agy-shell [data-testid="agent-response"] .md-table-frame,
+      .agy-shell [data-testid="agent-response"] .md-table-scroll,
       .agy-shell [data-testid="agent-response"] :has(table) {
+        width: 100% !important;
+        min-width: 0 !important;
         max-width: 100% !important;
         margin-left: 0 !important;
         margin-right: 0 !important;
+        margin-inline: 0 !important;
         left: auto !important;
         right: auto !important;
         transform: none !important;
         box-sizing: border-box !important;
       }
+      .agy-shell [data-testid="agent-response"] .md-table-scroll,
       .agy-shell [data-testid="agent-response"] :has(> table) {
-        width: 100% !important;
         overflow-x: auto !important;
         padding-left: 0 !important;
         padding-right: 0 !important;
@@ -495,12 +502,17 @@
         width: 100% !important;
         min-width: 0 !important;
         margin: 0 !important;
-        table-layout: auto !important;
+        table-layout: fixed !important;
         box-sizing: border-box !important;
       }
       .agy-shell [data-testid="agent-response"] :is(th, td) {
         white-space: normal !important;
         word-break: break-word !important;
+        overflow-wrap: anywhere !important;
+        padding: 8px 10px !important;
+      }
+      .agy-shell [data-testid="agent-response"] :is(td, th) .inline-pill-wrap {
+        min-width: 0 !important;
       }
       ${isLight ? `
       .agy-shell [data-main-content-body="true"],
