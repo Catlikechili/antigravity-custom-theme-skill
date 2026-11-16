@@ -478,7 +478,6 @@
       .agy-shell [data-testid="agent-response"] .md-table-bleed,
       .agy-shell [data-testid="agent-response"] .md-table-host,
       .agy-shell [data-testid="agent-response"] .md-table-frame,
-      .agy-shell [data-testid="agent-response"] .md-table-scroll,
       .agy-shell [data-testid="agent-response"] :has(table) {
         width: 100% !important;
         min-width: 0 !important;
@@ -491,25 +490,46 @@
         transform: none !important;
         box-sizing: border-box !important;
       }
+      .agy-shell [data-testid="agent-response"] .md-table-frame {
+        overflow: hidden !important;
+      }
       .agy-shell [data-testid="agent-response"] .md-table-scroll,
       .agy-shell [data-testid="agent-response"] :has(> table) {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
         overflow-x: auto !important;
+        overflow-y: hidden !important;
         padding-left: 0 !important;
         padding-right: 0 !important;
+        padding-bottom: 4px !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: ${mainTheme.borderColor} transparent !important;
+      }
+      .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar,
+      .agy-shell [data-testid="agent-response"] :has(> table)::-webkit-scrollbar {
+        height: 7px !important;
+        display: block !important;
+      }
+      .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar-thumb,
+      .agy-shell [data-testid="agent-response"] :has(> table)::-webkit-scrollbar-thumb {
+        background: ${mainTheme.borderColor} !important;
+        border-radius: 9999px !important;
       }
       .agy-shell [data-testid="agent-response"] table {
-        max-width: 100% !important;
-        width: 100% !important;
-        min-width: 0 !important;
+        width: max-content !important;
+        min-width: 100% !important;
+        max-width: none !important;
         margin: 0 !important;
-        table-layout: fixed !important;
+        table-layout: auto !important;
         box-sizing: border-box !important;
       }
       .agy-shell [data-testid="agent-response"] :is(th, td) {
+        max-width: 260px !important;
         white-space: normal !important;
         word-break: break-word !important;
-        overflow-wrap: anywhere !important;
-        padding: 8px 10px !important;
+        overflow-wrap: break-word !important;
+        padding: 8px 12px !important;
       }
       .agy-shell [data-testid="agent-response"] :is(td, th) .inline-pill-wrap {
         min-width: 0 !important;
