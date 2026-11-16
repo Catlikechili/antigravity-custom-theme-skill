@@ -475,18 +475,32 @@
         box-sizing: border-box !important;
         overflow: hidden !important;
       }
-      .agy-shell [data-testid="agent-response"] :has(> table) {
+      .agy-shell [data-testid="agent-response"] :has(table) {
         max-width: 100% !important;
-        width: 100% !important;
         margin-left: 0 !important;
         margin-right: 0 !important;
-        overflow-x: auto !important;
+        left: auto !important;
+        right: auto !important;
+        transform: none !important;
         box-sizing: border-box !important;
+      }
+      .agy-shell [data-testid="agent-response"] :has(> table) {
+        width: 100% !important;
+        overflow-x: auto !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
       }
       .agy-shell [data-testid="agent-response"] table {
         max-width: 100% !important;
         width: 100% !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        table-layout: auto !important;
         box-sizing: border-box !important;
+      }
+      .agy-shell [data-testid="agent-response"] :is(th, td) {
+        white-space: normal !important;
+        word-break: break-word !important;
       }
       ${isLight ? `
       .agy-shell [data-main-content-body="true"],
