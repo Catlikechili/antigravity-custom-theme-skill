@@ -22,11 +22,13 @@ Creates and applies custom glassmorphic themes (wallpapers, cohesive palettes, c
 1. **Gather aesthetic & inspect image**
    - Ask briefly for any missing intent only if ambiguous (mood: cozy warm, cyberpunk neon, anime cel, cosmic gold, minimalist pure-CSS gradient, etc.).
    - If the user provides an image with an unwanted corner watermark/signature, clean/crop it cleanly before staging.
-2. **Design cohesive tokens**
-   - Read `references/theme-schema.md` for every required `themes.json` key.
-   - Match `--t-accent`, `--t-bg-deep`, `--t-bg-card`, `--t-user-bg`, `--t-ink`, `--t-code-bg`, and `--t-surface-glass` to the wallpaper's dominant/accent colors while guaranteeing crisp readable contrast on dark glass.
+2. **Design cohesive tokens (Dark or Light Glass)**
+   - Read `references/theme-schema.md` for every `themes.json` key.
+   - Extract dominant & accent colors from the image to populate `primary`, `secondary`, `overlayRgb`, `bg`, `frameBg`, `sidebarBg`, `aiCardBg`, `headerBg`, `inputCardBg`, and `modalBg` with crisp readable contrast.
+   - For bright/daytime/pastel wallpapers, set `"isLight": true` with high-contrast dark ink (`uiTextColor`, `pillTextColor`) and light frosted `aiCardBg`/`overlayRgb`.
+   - When the user wants matching chat avatars (or provides character/themed artwork), also craft or crop square `userAvatar` & `agentAvatar` assets (PNG/WebP or bespoke SVG emblems) and custom `sticker`/`cornerSvg` flourishes.
 3. **Stage assets & edit `themes/themes.json`**
-   - Save wallpaper under `themes/assets/<slug>.webp` (or `.png`) and optional SVG stickers/corners under `themes/assets/`.
+   - Save wallpaper under `themes/assets/<slug>.webp` (or `.png`), optional SVG stickers/corners, and optional `userAvatar` / `agentAvatar` files under `themes/assets/`.
    - Add a new entry in `themes/themes.json` referencing `"assets/<filename>"` (keep existing sample presets unless asked to remove them).
    - Never hardcode personal OS paths (`C:\Users\...`, `/Users/...`, `/home/...`) in JSON, JS, or scripts.
 4. **Compile & syntax-check payload**
