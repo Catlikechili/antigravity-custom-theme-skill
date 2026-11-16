@@ -11,6 +11,9 @@
   const STORAGE_CUSTOM_WP = 'agy_custom_wp_v3';
   const STORAGE_USER_AVATAR = 'agy_user_avatar_v3';
   const STORAGE_AGENT_AVATAR = 'agy_agent_avatar_v3';
+  const STORAGE_GLASS_BLUR = 'agy_glass_blur_v3';
+  const STORAGE_AVATAR_SIZE = 'agy_avatar_size_v3';
+  const STORAGE_AVATAR_RADIUS = 'agy_avatar_radius_v3';
 
   const CHECK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
@@ -47,7 +50,13 @@
     const customWp = localStorage.getItem(STORAGE_CUSTOM_WP) || init.customWp || '';
     const userAvatar = localStorage.getItem(STORAGE_USER_AVATAR) ?? init.userAvatar ?? '';
     const agentAvatar = localStorage.getItem(STORAGE_AGENT_AVATAR) ?? init.agentAvatar ?? '';
-    return { themeName, bubbleName, inputStyle, dimming, wpEnabled, customWp, userAvatar, agentAvatar };
+    const rawBlur = localStorage.getItem(STORAGE_GLASS_BLUR) ?? init.glassBlur;
+    const glassBlur = rawBlur !== undefined && rawBlur !== null && rawBlur !== '' ? parseInt(rawBlur, 10) : 3;
+    const rawAvSize = localStorage.getItem(STORAGE_AVATAR_SIZE) ?? init.avatarSize;
+    const avatarSize = rawAvSize !== undefined && rawAvSize !== null && rawAvSize !== '' ? parseInt(rawAvSize, 10) : 32;
+    const rawAvRad = localStorage.getItem(STORAGE_AVATAR_RADIUS) ?? init.avatarRadius;
+    const avatarRadius = rawAvRad !== undefined && rawAvRad !== null && rawAvRad !== '' ? parseInt(rawAvRad, 10) : 50;
+    return { themeName, bubbleName, inputStyle, dimming, wpEnabled, customWp, userAvatar, agentAvatar, glassBlur, avatarSize, avatarRadius };
   }
 
   // Downscale user/agent avatar uploads to 192x192 WebP once so theme_config.json stays tiny
@@ -104,9 +113,9 @@
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        const pxMatch = String(blurStr || '3px').match(/(\d+(?:\.\d+)?)/);
-        const scaledBlur = Math.max(1, Math.min(8, Math.round((pxMatch ? parseFloat(pxMatch[1]) : 3) * 0.75)));
-        ctx.filter = `blur(${scaledBlur}px)`;
+        const pxMatch = String(blurStr !== undefined ? blurStr : '3px').match(/(\d+(?:\.\d+)?)/);
+        const scaledBlur = Math.max(0, Math.min(16, Math.round((pxMatch ? parseFloat(pxMatch[1]) : 3) * 0.75)));
+        ctx.filter = scaledBlur > 0 ? `blur(${scaledBlur}px)` : 'none';
         ctx.drawImage(img, -12, -12, w + 24, h + 24);
         ctx.filter = 'none';
         ctx.fillStyle = `rgba(${overlayRgb}, ${overlayAlpha})`;
@@ -140,6 +149,15 @@
       }
       if (overrides.agentAvatar !== undefined) {
         localStorage.setItem(STORAGE_AGENT_AVATAR, overrides.agentAvatar);
+      }
+      if (overrides.glassBlur !== undefined) {
+        localStorage.setItem(STORAGE_GLASS_BLUR, String(overrides.glassBlur));
+      }
+      if (overrides.avatarSize !== undefined) {
+        localStorage.setItem(STORAGE_AVATAR_SIZE, String(overrides.avatarSize));
+      }
+      if (overrides.avatarRadius !== undefined) {
+        localStorage.setItem(STORAGE_AVATAR_RADIUS, String(overrides.avatarRadius));
       }
     } catch (e) {}
 
@@ -381,21 +399,24 @@
 
     const effectiveUserAvatar = st.userAvatar === 'none' ? '' : (st.userAvatar || mainTheme.userAvatar || '');
     const effectiveAgentAvatar = st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || '');
+    const avSize = Math.min(52, Math.max(22, Number(st.avatarSize) || 32));
+    const avAgentSize = Math.max(22, avSize - 2);
+    const avRadius = Math.min(50, Math.max(0, Number.isFinite(Number(st.avatarRadius)) ? Number(st.avatarRadius) : 50));
 
     const avatarCss = `
       ${effectiveUserAvatar ? `
       .agy-shell [data-testid="user-message"] {
         position: relative !important;
-        padding-right: 42px !important;
+        padding-right: ${avSize + 10}px !important;
       }
       .agy-shell [data-testid="user-message"]::after {
         content: "";
         position: absolute;
         right: 0;
         bottom: 6px;
-        width: 32px;
-        height: 32px;
-        border-radius: 9999px;
+        width: ${avSize}px;
+        height: ${avSize}px;
+        border-radius: ${avRadius}%;
         background-image: url("${effectiveUserAvatar}");
         background-size: cover;
         background-position: center;
@@ -407,17 +428,17 @@
       ${effectiveAgentAvatar ? `
       .agy-shell [data-testid="agent-response"] {
         position: relative !important;
-        padding-left: 52px !important;
-        min-height: 50px !important;
+        padding-left: ${avAgentSize + 22}px !important;
+        min-height: ${avAgentSize + 20}px !important;
       }
       .agy-shell [data-testid="agent-response"]::before {
         content: "";
         position: absolute;
         top: 12px;
         left: 12px;
-        width: 30px;
-        height: 30px;
-        border-radius: 9999px;
+        width: ${avAgentSize}px;
+        height: ${avAgentSize}px;
+        border-radius: ${avRadius}%;
         background-image: url("${effectiveAgentAvatar}");
         background-size: cover;
         background-position: center;
@@ -470,7 +491,8 @@
       syncShellMetrics();
     }
     if (useUnifiedGlass) {
-      syncPrebakedGlass(wpUrl, overlayRgb, overlayAlpha, mainTheme.headerBg || '', mainTheme.headerBlur || '3px');
+      const effectiveBlur = Number.isFinite(st.glassBlur) ? `${st.glassBlur}px` : (mainTheme.headerBlur || '3px');
+      syncPrebakedGlass(wpUrl, overlayRgb, overlayAlpha, mainTheme.headerBg || '', effectiveBlur);
     } else {
       syncPrebakedGlass(null);
     }
@@ -887,49 +909,84 @@
         <div style="border: 1px solid ${mainTheme.borderColor}; background: ${mainTheme.cardBg || 'rgba(22, 16, 14, 0.72)'}; border-radius: 12px; padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
-              <div style="font-size: 14.5px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Wallpaper & Backdrop Dimming</div>
-              <div style="font-size: 12.5px; color: #a1a1aa;">Balance artwork clarity against code & message readability.</div>
+              <div style="font-size: 14.5px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Wallpaper, Pre-Baked Blur & Config</div>
+              <div style="font-size: 12.5px; color: #a1a1aa;">Balance artwork clarity, 120fps pre-baked frosted glass blur, or share config JSON.</div>
             </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
               <label style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #d4d4d8; cursor: pointer;">
                 <input id="agy-wp-toggle" type="checkbox" ${st.wpEnabled ? 'checked' : ''} style="accent-color: ${mainTheme.primary}; cursor: pointer;" />
-                Theme Backdrop
+                Backdrop
               </label>
-              <input id="agy-dim-slider" type="range" min="15" max="92" value="${st.dimming}" style="width: 125px; cursor: pointer; accent-color: #ffffff; height: 5px;" />
-              <span id="agy-dim-val" style="font-size: 13px; color: #a1a1aa; min-width: 34px; text-align: right;">${st.dimming}%</span>
-              <label style="padding: 5px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${mainTheme.borderColor}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #a1a1aa;">
+                Dim
+                <input id="agy-dim-slider" type="range" min="15" max="92" value="${st.dimming}" style="width: 96px; cursor: pointer; accent-color: #ffffff; height: 5px;" />
+                <span id="agy-dim-val" style="min-width: 32px; text-align: right;">${st.dimming}%</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #a1a1aa;">
+                Blur
+                <input id="agy-blur-slider" type="range" min="0" max="16" value="${st.glassBlur}" style="width: 78px; cursor: pointer; accent-color: ${mainTheme.primary}; height: 5px;" />
+                <span id="agy-blur-val" style="min-width: 30px; text-align: right;">${st.glassBlur}px</span>
+              </label>
+              <label style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${mainTheme.borderColor}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
                 Custom Image
                 <input id="agy-wp-upload" type="file" accept="image/*" style="display: none;" />
               </label>
-              <button id="agy-reset-btn" type="button" style="padding: 5px 12px; border-radius: 8px; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                Reset Default
+              <button id="agy-export-btn" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                Export JSON
               </button>
+              <button id="agy-import-toggle" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                Import JSON
+              </button>
+              <button id="agy-reset-btn" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                Reset
+              </button>
+            </div>
+          </div>
+          <div id="agy-import-box" style="display: none; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
+            <textarea id="agy-import-text" rows="3" placeholder='Paste exported theme config JSON here (e.g. {"themeName":"WLOP Cosmic","dimming":45,...})' style="width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.35); color: #f4f4f5; border: 1px solid ${mainTheme.borderColor}; border-radius: 8px; padding: 8px 10px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
+              <span id="agy-import-msg" style="font-size: 12px; color: #fca5a5;"></span>
+              <button id="agy-import-apply" type="button" style="padding: 5px 12px; border-radius: 7px; background: ${mainTheme.primary}; color: #090d16; font-weight: 600; font-size: 12px; border: none; cursor: pointer;">Apply JSON</button>
             </div>
           </div>
         </div>
 
-        <div style="border: 1px solid ${mainTheme.borderColor}; background: ${mainTheme.cardBg || 'rgba(22, 16, 14, 0.72)'}; border-radius: 12px; padding: 14px 20px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-          <div>
-            <div style="font-size: 14px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Chat Avatars (User & AI Agent)</div>
-            <div style="font-size: 12px; color: #a1a1aa;">Optional circular profile badges rendered beside chat messages (auto-compressed WebP).</div>
+        <div style="border: 1px solid ${mainTheme.borderColor}; background: ${mainTheme.cardBg || 'rgba(22, 16, 14, 0.72)'}; border-radius: 12px; padding: 14px 20px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <div style="font-size: 14px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Chat Avatars (User & AI Agent)</div>
+              <div style="font-size: 12px; color: #a1a1aa;">Profile badges rendered beside chat messages (auto-compressed WebP).</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div id="agy-user-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${mainTheme.primary}; background: rgba(255,255,255,0.06) ${effUserAv ? `url('${effUserAv}') center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effUserAv ? '' : 'U'}</div>
+                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${mainTheme.borderColor}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                  User
+                  <input id="agy-user-av-upload" type="file" accept="image/*" style="display: none;" />
+                </label>
+                <button id="agy-user-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Off</button>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div id="agy-agent-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${mainTheme.secondary || mainTheme.primary}; background: rgba(255,255,255,0.06) ${effAgentAv ? `url('${effAgentAv}') center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effAgentAv ? '' : 'AI'}</div>
+                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${mainTheme.borderColor}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                  Agent
+                  <input id="agy-agent-av-upload" type="file" accept="image/*" style="display: none;" />
+                </label>
+                <button id="agy-agent-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Off</button>
+              </div>
+            </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div id="agy-user-av-preview" style="width: 30px; height: 30px; border-radius: 9999px; border: 1.5px solid ${mainTheme.primary}; background: rgba(255,255,255,0.06) ${effUserAv ? `url('${effUserAv}') center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effUserAv ? '' : 'U'}</div>
-              <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${mainTheme.borderColor}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                User
-                <input id="agy-user-av-upload" type="file" accept="image/*" style="display: none;" />
-              </label>
-              <button id="agy-user-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Off</button>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div id="agy-agent-av-preview" style="width: 30px; height: 30px; border-radius: 9999px; border: 1.5px solid ${mainTheme.secondary || mainTheme.primary}; background: rgba(255,255,255,0.06) ${effAgentAv ? `url('${effAgentAv}') center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effAgentAv ? '' : 'AI'}</div>
-              <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${mainTheme.borderColor}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                Agent
-                <input id="agy-agent-av-upload" type="file" accept="image/*" style="display: none;" />
-              </label>
-              <button id="agy-agent-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Off</button>
-            </div>
+          <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.07);">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1aa;">
+              Size
+              <input id="agy-av-size" type="range" min="22" max="52" value="${st.avatarSize}" style="width: 100px; cursor: pointer; accent-color: ${mainTheme.primary}; height: 5px;" />
+              <span id="agy-av-size-val" style="min-width: 34px;">${st.avatarSize}px</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1aa;">
+              Corner Radius
+              <input id="agy-av-rad" type="range" min="0" max="50" value="${st.avatarRadius}" style="width: 100px; cursor: pointer; accent-color: ${mainTheme.primary}; height: 5px;" />
+              <span id="agy-av-rad-val" style="min-width: 34px;">${st.avatarRadius}%</span>
+            </label>
           </div>
         </div>
 
@@ -1151,11 +1208,100 @@
       });
     }
 
+    const blurSlider = container.querySelector('#agy-blur-slider');
+    const blurLabel = container.querySelector('#agy-blur-val');
+    if (blurSlider) {
+      blurSlider.addEventListener('input', (e) => {
+        const v = parseInt(e.target.value, 10);
+        if (blurLabel) blurLabel.textContent = v + 'px';
+        applyTheme({ glassBlur: v });
+      });
+    }
+
+    const avSizeSlider = container.querySelector('#agy-av-size');
+    const avSizeVal = container.querySelector('#agy-av-size-val');
+    if (avSizeSlider) {
+      avSizeSlider.addEventListener('input', (e) => {
+        const v = parseInt(e.target.value, 10);
+        if (avSizeVal) avSizeVal.textContent = v + 'px';
+        applyTheme({ avatarSize: v });
+      });
+    }
+
+    const avRadSlider = container.querySelector('#agy-av-rad');
+    const avRadVal = container.querySelector('#agy-av-rad-val');
+    if (avRadSlider) {
+      avRadSlider.addEventListener('input', (e) => {
+        const v = parseInt(e.target.value, 10);
+        if (avRadVal) avRadVal.textContent = v + '%';
+        if (userAvPreview) userAvPreview.style.borderRadius = v + '%';
+        if (agentAvPreview) agentAvPreview.style.borderRadius = v + '%';
+        applyTheme({ avatarRadius: v });
+      });
+    }
+
+    const exportBtn = container.querySelector('#agy-export-btn');
+    const importToggle = container.querySelector('#agy-import-toggle');
+    const importBox = container.querySelector('#agy-import-box');
+    const importText = container.querySelector('#agy-import-text');
+    const importApply = container.querySelector('#agy-import-apply');
+    const importMsg = container.querySelector('#agy-import-msg');
+
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => {
+        const json = JSON.stringify(getState(), null, 2);
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          navigator.clipboard.writeText(json).then(() => {
+            exportBtn.textContent = 'Copied ✓';
+            setTimeout(() => { exportBtn.textContent = 'Export JSON'; }, 1500);
+          }).catch(() => {
+            if (importBox && importText) {
+              importBox.style.display = 'flex';
+              importText.value = json;
+              importText.select();
+            }
+          });
+        } else if (importBox && importText) {
+          importBox.style.display = 'flex';
+          importText.value = json;
+          importText.select();
+        }
+      });
+    }
+    if (importToggle && importBox) {
+      importToggle.addEventListener('click', () => {
+        importBox.style.display = importBox.style.display === 'none' ? 'flex' : 'none';
+        if (importMsg) importMsg.textContent = '';
+      });
+    }
+    if (importApply && importText) {
+      importApply.addEventListener('click', () => {
+        try {
+          const parsed = JSON.parse(importText.value.trim());
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error('Config must be a JSON object');
+          }
+          const allowed = {};
+          const keys = ['themeName', 'bubbleName', 'inputStyle', 'dimming', 'wpEnabled', 'customWp', 'userAvatar', 'agentAvatar', 'glassBlur', 'avatarSize', 'avatarRadius'];
+          keys.forEach((k) => {
+            if (parsed[k] !== undefined) allowed[k] = parsed[k];
+          });
+          applyTheme(allowed);
+          renderThemePanels(container);
+        } catch (err) {
+          if (importMsg) importMsg.textContent = 'Invalid JSON: ' + err.message;
+        }
+      });
+    }
+
     const resetBtn = container.querySelector('#agy-reset-btn');
     resetBtn.addEventListener('click', () => {
       localStorage.removeItem(STORAGE_CUSTOM_WP);
       localStorage.removeItem(STORAGE_USER_AVATAR);
       localStorage.removeItem(STORAGE_AGENT_AVATAR);
+      localStorage.removeItem(STORAGE_GLASS_BLUR);
+      localStorage.removeItem(STORAGE_AVATAR_SIZE);
+      localStorage.removeItem(STORAGE_AVATAR_RADIUS);
       localStorage.removeItem(STORAGE_THEME);
       localStorage.removeItem(STORAGE_BUBBLE);
       localStorage.removeItem(STORAGE_INPUT);
@@ -1169,13 +1315,24 @@
         wpEnabled: true,
         customWp: '',
         userAvatar: '',
-        agentAvatar: ''
+        agentAvatar: '',
+        glassBlur: 3,
+        avatarSize: 32,
+        avatarRadius: 50
       });
       const defTh = THEMES[DEFAULT_THEME_KEY] || {};
       syncAvPreview(userAvPreview, defTh.userAvatar || '', 'U');
       syncAvPreview(agentAvPreview, defTh.agentAvatar || '', 'AI');
+      if (userAvPreview) userAvPreview.style.borderRadius = '50%';
+      if (agentAvPreview) agentAvPreview.style.borderRadius = '50%';
       if (slider) slider.value = 69;
       if (valLabel) valLabel.textContent = '69%';
+      if (blurSlider) blurSlider.value = 3;
+      if (blurLabel) blurLabel.textContent = '3px';
+      if (avSizeSlider) avSizeSlider.value = 32;
+      if (avSizeVal) avSizeVal.textContent = '32px';
+      if (avRadSlider) avRadSlider.value = 50;
+      if (avRadVal) avRadVal.textContent = '50%';
       if (wpToggle) wpToggle.checked = true;
 
       container.querySelectorAll('.agy-preset-card').forEach(c => {
