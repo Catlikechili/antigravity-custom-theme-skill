@@ -473,6 +473,20 @@
         padding: 12px 16px !important;
         box-shadow: ${isLight ? '0 4px 14px rgba(15, 23, 42, 0.08)' : '0 4px 14px rgba(0, 0, 0, 0.28)'} !important;
         box-sizing: border-box !important;
+        overflow: hidden !important;
+      }
+      .agy-shell [data-testid="agent-response"] :has(> table) {
+        max-width: 100% !important;
+        width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        overflow-x: auto !important;
+        box-sizing: border-box !important;
+      }
+      .agy-shell [data-testid="agent-response"] table {
+        max-width: 100% !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
       }
       ${isLight ? `
       .agy-shell [data-main-content-body="true"],
