@@ -513,23 +513,41 @@
         transform: none !important;
         box-sizing: border-box !important;
       }
-      .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar,
-      .agy-shell [data-testid="agent-response"] :has(> table):not(.md-table-frame)::-webkit-scrollbar {
+      .agy-shell [data-testid="agent-response"] :is(.md-math-display, .katex-display) {
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        padding-bottom: 4px !important;
+        box-sizing: border-box !important;
+        scrollbar-width: auto !important;
+        scrollbar-color: auto !important;
+      }
+      .agy-shell [data-testid="agent-response"] :not(.md-math-display):not(.katex-display) > .katex {
+        display: inline-block !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        vertical-align: middle !important;
+        box-sizing: border-box !important;
+        scrollbar-width: auto !important;
+        scrollbar-color: auto !important;
+      }
+      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, :has(> table):not(.md-table-frame), .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar {
         height: 8px !important;
         display: block !important;
       }
-      .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar-track,
-      .agy-shell [data-testid="agent-response"] :has(> table):not(.md-table-frame)::-webkit-scrollbar-track {
+      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, :has(> table):not(.md-table-frame), .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar-track {
         background: ${isLight ? 'rgba(15, 23, 42, 0.06)' : 'rgba(255, 255, 255, 0.06)'} !important;
         border-radius: 9999px !important;
       }
-      .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar-thumb,
-      .agy-shell [data-testid="agent-response"] :has(> table):not(.md-table-frame)::-webkit-scrollbar-thumb {
+      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, :has(> table):not(.md-table-frame), .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar-thumb {
         background: ${isLight ? 'rgba(15, 23, 42, 0.34)' : 'rgba(148, 163, 184, 0.48)'} !important;
         border-radius: 9999px !important;
       }
-      .agy-shell [data-testid="agent-response"] .md-table-scroll::-webkit-scrollbar-thumb:hover,
-      .agy-shell [data-testid="agent-response"] :has(> table):not(.md-table-frame)::-webkit-scrollbar-thumb:hover {
+      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, :has(> table):not(.md-table-frame), .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar-thumb:hover {
         background: ${isLight ? 'rgba(15, 23, 42, 0.54)' : 'rgba(148, 163, 184, 0.72)'} !important;
       }
       .agy-shell [data-testid="agent-response"] table {
