@@ -68,6 +68,17 @@ node scripts/uninstall.js
 
 Removes auto-start shortcuts/services, stops the background daemon, and immediately restores Antigravity's default styling on open windows.
 
+## Troubleshooting: Theme Disappeared After an Antigravity Update
+
+Starting with **Antigravity v2.33.0+**, Antigravity no longer creates `DevToolsActivePort` by default unless launched with `--remote-debugging-port=0`, and the built-in auto-updater restarts `Antigravity.exe --updated` without shortcut flags.
+
+- **Windows:**
+  1. Re-run `powershell -ExecutionPolicy Bypass -File scripts/install-win.ps1` (it automatically patches `--remote-debugging-port=0` onto your `Antigravity.lnk` shortcuts in Start Menu, Desktop, Startup, and Taskbar).
+  2. **Quit Antigravity completely** (right-click the System Tray icon -> **Quit**) and reopen it from the **Start Menu**.
+  3. If you use a **Taskbar pin**, **Unpin** the old icon and re-pin it from the Start Menu `Antigravity` shortcut so the `--remote-debugging-port=0` flag is preserved.
+- **macOS / Linux:**
+  - Start Antigravity with `--remote-debugging-port=0` (`open -a Antigravity --args --remote-debugging-port=0` on macOS, or append `--remote-debugging-port=0` to the `Exec=` command in your `.desktop` entry on Linux).
+
 ## Use as an Antigravity Skill (`SKILL.md`)
 
 Copy or clone this repository into either:
