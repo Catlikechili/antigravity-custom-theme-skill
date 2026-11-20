@@ -693,14 +693,14 @@
     const sidebarOuterCss = useUnifiedGlass ? `
       .agy-shell aside,
       .agy-shell [data-sidebar="true"],
-      .agy-shell .bg-sidebar {
+      .agy-shell .bg-sidebar:not(.surface-opaque) {
         background: transparent !important;
         backdrop-filter: none !important;
       }
     ` : `
       .agy-shell aside,
       .agy-shell [data-sidebar="true"],
-      .agy-shell .bg-sidebar {
+      .agy-shell .bg-sidebar:not(.surface-opaque) {
         background: ${sidebarBg} !important;
         backdrop-filter: none !important;
       }
@@ -709,13 +709,21 @@
     styleEl.textContent = `
       ${wpCss}
 
-      /* Translucent themed sidebar (unified via ::before when unifiedGlass is active) */
+      /* Translucent themed glass sidebar (unified via ::before when unifiedGlass is active) */
       ${sidebarOuterCss}
-      .agy-shell .bg-sidebar .bg-sidebar,
-      .agy-shell [data-sidebar="true"] .bg-sidebar,
-      .agy-shell .bg-sidebar [class*="group/headerbtn"],
-      .agy-shell .bg-sidebar [class*="group/section-header"] {
+      .agy-shell .bg-sidebar:not(.surface-opaque) .bg-sidebar:not(.surface-opaque),
+      .agy-shell [data-sidebar="true"] .bg-sidebar:not(.surface-opaque),
+      .agy-shell .bg-sidebar:not(.surface-opaque) [class*="group/headerbtn"],
+      .agy-shell .bg-sidebar:not(.surface-opaque) [class*="group/section-header"] {
         background: transparent !important;
+        backdrop-filter: none !important;
+      }
+      /* Keep floating menubar dropdowns & opaque popovers readable (never inherit transparent sidebar bg) */
+      .agy-shell .surface-opaque.bg-sidebar,
+      .agy-shell .surface-opaque.border-menu-border {
+        background: ${modalBg} !important;
+        border-color: ${mainTheme.borderColor} !important;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, ${isLight ? '0.18' : '0.65'}) !important;
         backdrop-filter: none !important;
       }
       /* Preserve virtual list positioning; hide sticky headers only while scrolled */
