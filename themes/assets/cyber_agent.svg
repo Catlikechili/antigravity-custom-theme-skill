@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <radialGradient id="cyAiBg" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#190e36"/>
+      <stop offset="65%" stop-color="#070a1c"/>
+      <stop offset="100%" stop-color="#03050e"/>
+    </radialGradient>
+    <linearGradient id="cyAiCore" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f5d4"/>
+      <stop offset="50%" stop-color="#00bbf9"/>
+      <stop offset="100%" stop-color="#f72585"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="24" fill="url(#cyAiBg)"/>
+  <!-- Outer HUD reticle -->
+  <circle cx="64" cy="64" r="53" stroke="#00f5d4" stroke-width="1.5" stroke-dasharray="14 6" opacity="0.7"/>
+  <circle cx="64" cy="64" r="46" stroke="#f72585" stroke-width="1.2" opacity="0.6"/>
+  <!-- Neural matrix hexagon -->
+  <polygon points="64,20 102,42 102,86 64,108 26,86 26,42" fill="#070b1e" stroke="url(#cyAiCore)" stroke-width="2.2"/>
+  <polygon points="64,30 93,47 93,81 64,98 35,81 35,47" stroke="#00f5d4" stroke-width="1" opacity="0.45"/>
+  <!-- Circuit spokes -->
+  <path d="M 64 20 V 38 M 64 90 V 108 M 26 42 L 42 51 M 86 77 L 102 86 M 102 42 L 86 51 M 42 77 L 26 86" stroke="#00f5d4" stroke-width="1.5"/>
+  <!-- Isometric AI Core Diamond -->
+  <polygon points="64,38 86,64 64,90 42,64" fill="url(#cyAiCore)" opacity="0.9"/>
+  <polygon points="64,46 78,64 64,82 50,64" fill="#050816"/>
+  <circle cx="64" cy="64" r="8.5" fill="url(#cyAiCore)"/>
+  <circle cx="64" cy="64" r="3.8" fill="#ffffff"/>
+  <!--Glowing nodes-->
+  <circle cx="64" cy="20" r="3" fill="#00f5d4"/>
+  <circle cx="102" cy="42" r="3" fill="#f72585"/>
+  <circle cx="102" cy="86" r="3" fill="#00f5d4"/>
+  <circle cx="64" cy="108" r="3" fill="#f72585"/>
+  <circle cx="26" cy="86" r="3" fill="#00f5d4"/>
+  <circle cx="26" cy="42" r="3" fill="#f72585"/>
+</svg>

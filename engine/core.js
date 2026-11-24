@@ -1520,11 +1520,17 @@
   function injectMainSidebarButton() {
     if (document.getElementById('agy-custom-theme-sidebar-btn')) return;
 
-    const sidebar = document.querySelector('.bg-sidebar');
-    if (!sidebar) return;
-
-    const spans = Array.from(sidebar.querySelectorAll('span'));
-    const customSpan = spans.find(s => s.textContent?.trim() === 'Customizations');
+    const sidebars = Array.from(document.querySelectorAll('.bg-sidebar'));
+    let customSpan = null;
+    for (const sb of sidebars) {
+      const spans = Array.from(sb.querySelectorAll('span'));
+      customSpan = spans.find(s => s.textContent?.trim() === 'Customizations');
+      if (customSpan) break;
+    }
+    if (!customSpan) {
+      const allSpans = Array.from(document.querySelectorAll('span'));
+      customSpan = allSpans.find(s => s.textContent?.trim() === 'Customizations');
+    }
     if (!customSpan) return;
 
     const row = customSpan.closest('a, button, div[role="button"], .group\\/headerbtn') || customSpan.parentElement;

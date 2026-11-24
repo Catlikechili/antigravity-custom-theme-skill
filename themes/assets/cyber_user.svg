@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <radialGradient id="cyUserBg" cx="50%" cy="42%" r="62%">
+      <stop offset="0%" stop-color="#131b3a"/>
+      <stop offset="65%" stop-color="#080c1f"/>
+      <stop offset="100%" stop-color="#040611"/>
+    </radialGradient>
+    <linearGradient id="cyVisor" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00f5d4"/>
+      <stop offset="52%" stop-color="#72efdd"/>
+      <stop offset="100%" stop-color="#f72585"/>
+    </linearGradient>
+    <linearGradient id="cySuit" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#090d1d"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="24" fill="url(#cyUserBg)"/>
+  <!-- Subtle matrix grid lines -->
+  <path d="M 0 32 H 128 M 0 64 H 128 M 0 96 H 128 M 32 0 V 128 M 64 0 V 128 M 96 0 V 128" stroke="#00f5d4" stroke-width="0.6" opacity="0.12"/>
+  <circle cx="64" cy="64" r="54" stroke="url(#cyVisor)" stroke-width="2.2" opacity="0.85"/>
+  <circle cx="64" cy="64" r="48" stroke="#f72585" stroke-width="1" stroke-dasharray="6 4" opacity="0.45"/>
+  <!-- Cyber Jacket Collar & Shoulders -->
+  <path d="M 24 114 C 27 92, 42 82, 64 82 C 86 82, 101 92, 104 114 Z" fill="url(#cySuit)" stroke="#00f5d4" stroke-width="1.8"/>
+  <path d="M 42 86 L 52 104 L 64 95 L 76 104 L 86 86" stroke="#f72585" stroke-width="1.8" stroke-linejoin="round"/>
+  <!-- Cyber Runner Head & Helmet -->
+  <path d="M 41 52 C 41 34, 51 25, 64 25 C 77 25, 87 34, 87 52 C 87 67, 77 77, 64 77 C 51 77, 41 67, 41 52 Z" fill="#0f172a" stroke="#00f5d4" stroke-width="1.8"/>
+  <!-- Glowing Neon Visor -->
+  <path d="M 38 47 Q 64 41 90 47 L 86 58 Q 64 53 42 58 Z" fill="url(#cyVisor)"/>
+  <path d="M 44 50 Q 64 46 78 49" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" opacity="0.9"/>
+  <!-- Ear HUD pods -->
+  <rect x="35" y="46" width="5" height="13" rx="2" fill="#f72585"/>
+  <rect x="88" y="46" width="5" height="13" rx="2" fill="#00f5d4"/>
+  <circle cx="64" cy="16" r="2.2" fill="#00f5d4"/>
+</svg>

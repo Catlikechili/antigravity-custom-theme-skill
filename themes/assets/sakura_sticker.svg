@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 40" fill="none">
+  <defs>
+    <linearGradient id="skBranch" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#818cf8" stop-opacity="0.15"/>
+      <stop offset="40%" stop-color="#818cf8" stop-opacity="0.88"/>
+      <stop offset="75%" stop-color="#fb7185" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#fda4af" stop-opacity="0.2"/>
+    </linearGradient>
+    <radialGradient id="skBlossom" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#fff1f2"/>
+      <stop offset="60%" stop-color="#fda4af"/>
+      <stop offset="100%" stop-color="#fb7185"/>
+    </radialGradient>
+  </defs>
+  <!-- Graceful twilight branch & breeze trail -->
+  <path d="M 8 28 Q 52 10 118 24" stroke="url(#skBranch)" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 22 32 Q 66 18 108 29" stroke="#c7d2fe" stroke-width="0.85" stroke-dasharray="3 3" opacity="0.65"/>
+  <!-- Main 5-Petal Sakura Blossom -->
+  <g transform="translate(72, 18)">
+    <path d="M 0 -2 C -3 -9, -2 -13, 0 -11.5 C 2 -13, 3 -9, 0 -2 Z" fill="url(#skBlossom)"/>
+    <path d="M 0 -2 C -3 -9, -2 -13, 0 -11.5 C 2 -13, 3 -9, 0 -2 Z" transform="rotate(72)" fill="url(#skBlossom)"/>
+    <path d="M 0 -2 C -3 -9, -2 -13, 0 -11.5 C 2 -13, 3 -9, 0 -2 Z" transform="rotate(144)" fill="url(#skBlossom)"/>
+    <path d="M 0 -2 C -3 -9, -2 -13, 0 -11.5 C 2 -13, 3 -9, 0 -2 Z" transform="rotate(216)" fill="url(#skBlossom)"/>
+    <path d="M 0 -2 C -3 -9, -2 -13, 0 -11.5 C 2 -13, 3 -9, 0 -2 Z" transform="rotate(288)" fill="url(#skBlossom)"/>
+    <circle cx="0" cy="0" r="2.4" fill="#fb7185"/>
+    <circle cx="0" cy="0" r="1.2" fill="#fef08a"/>
+  </g>
+  <!-- Secondary Twilight Blossom -->
+  <g transform="translate(45, 20) scale(0.72) rotate(18)">
+    <path d="M 0 -2 C -3 -9, -2 -13, 0 -11.5 C 2 -13, 3 -9, 0 -2 Z" fill="#ffe4e6"/>
+    <path d="M 0 -2 C -3 -9, -2 -13, 0 -11.5 C 2 -13, 3 -9, 0 -2 Z" transform="rotate(72)" fill="#fda4af"/>
+    <path d="M 0 -2 C -3 -9, -2 -13, 0 -11.5 C 2 -13, 3 -9, 0 -2 Z" transform="rotate(144)" fill="#ffe4e6"/>
+    <path d="M 0 -2 C -3 -9, -2 -13, 0 -11.5 C 2 -13, 3 -9, 0 -2 Z" transform="rotate(216)" fill="#fda4af"/>
+    <path d="M 0 -2 C -3 -9, -2 -13, 0 -11.5 C 2 -13, 3 -9, 0 -2 Z" transform="rotate(288)" fill="#ffe4e6"/>
+    <circle cx="0" cy="0" r="2.2" fill="#fde047"/>
+  </g>
+  <!-- Drifting Petals & Twilight Sparkles -->
+  <path d="M 96 13 C 99 9, 104 11, 102 15 C 99 17, 95 16, 96 13 Z" fill="#fda4af" opacity="0.92"/>
+  <path d="M 25 21 C 28 18, 32 20, 30 23 C 27 25, 24 24, 25 21 Z" fill="#fb7185" opacity="0.88"/>
+  <path d="M 111 17 L 112 14.5 L 114.5 13.5 L 112 12.5 L 111 10 L 110 12.5 L 107.5 13.5 L 110 14.5 Z" fill="#c7d2fe"/>
+  <path d="M 16 20 L 16.8 18 L 18.8 17.2 L 16.8 16.4 L 16 14.4 L 15.2 16.4 L 13.2 17.2 L 15.2 18 Z" fill="#fda4af"/>
+</svg>

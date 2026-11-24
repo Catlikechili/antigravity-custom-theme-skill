@@ -1,5 +1,4 @@
-# Build & runtime outputs
-dist/
+# Runtime state & local launcher outputs (dist/theme_payload.js is tracked for zero-build install)
 daemon.log
 daemon.pid
 theme_config.json
