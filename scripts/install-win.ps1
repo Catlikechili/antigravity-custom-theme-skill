@@ -190,7 +190,7 @@ $EscapedDaemon = $DaemonJs.Replace('"', '""')
 $VbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
 WshShell.CurrentDirectory = "$($RepoRoot.Replace('"', '""'))"
-WshShell.Run """$EscapedNode"" --max-old-space-size=24 --expose-gc ""$EscapedDaemon""", 0, False
+WshShell.Run """$EscapedNode"" --expose-gc ""$EscapedDaemon""", 0, False
 "@
 Set-Content -Path $VbsPath -Value $VbsContent -Encoding ASCII
 
@@ -221,7 +221,20 @@ foreach ($SearchDir in $ShortcutSearchDirs) {
     }
 }
 
+$TaskName = 'AntigravityCustomTheme'
+$TaskCreated = $false
 if (-not $NoStartup) {
+    try {
+        $PrevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        & schtasks.exe /Create /TN $TaskName /TR "wscript.exe `"$VbsPath`"" /SC ONLOGON /RL LIMITED /F 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $TaskCreated = $true
+            Write-Host "[install-win] Registered Windows Scheduled Task: $TaskName"
+        }
+        $ErrorActionPreference = $PrevEap
+    } catch {}
+
     $StartupDir = [Environment]::GetFolderPath('Startup')
     $ShortcutPath = Join-Path $StartupDir 'AntigravityCustomTheme.lnk'
     $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
@@ -234,8 +247,13 @@ if (-not $NoStartup) {
     Write-Host "[install-win] Startup shortcut created: $ShortcutPath"
 }
 
-Write-Host "[install-win] Launching daemon via wscript.exe..."
-Start-Process -FilePath 'wscript.exe' -ArgumentList """$VbsPath""" -WorkingDirectory $RepoRoot
+if ($TaskCreated) {
+    Write-Host "[install-win] Starting independent daemon via Task Scheduler ($TaskName)..."
+    & schtasks.exe /Run /TN $TaskName 2>$null | Out-Null
+} else {
+    Write-Host "[install-win] Launching daemon via wscript.exe..."
+    Start-Process -FilePath 'wscript.exe' -ArgumentList """$VbsPath""" -WorkingDirectory $RepoRoot
+}
 
 for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Milliseconds 250
