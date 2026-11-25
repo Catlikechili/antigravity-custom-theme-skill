@@ -247,11 +247,20 @@ if (-not $NoStartup) {
     Write-Host "[install-win] Startup shortcut created: $ShortcutPath"
 }
 
-if ($TaskCreated) {
-    Write-Host "[install-win] Starting independent daemon via Task Scheduler ($TaskName)..."
-    & schtasks.exe /Run /TN $TaskName 2>$null | Out-Null
-} else {
-    Write-Host "[install-win] Launching daemon via wscript.exe..."
+Write-Host "[install-win] Launching independent daemon via Win32_Process (survives terminal & IDE restarts)..."
+$WmiSpawned = $false
+try {
+    $CmdLine = "wscript.exe `"$VbsPath`""
+    $CimRes = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+        CommandLine = $CmdLine
+        CurrentDirectory = $RepoRoot
+    } -ErrorAction Stop
+    if ($CimRes -and $CimRes.ReturnValue -eq 0) {
+        $WmiSpawned = $true
+    }
+} catch {}
+
+if (-not $WmiSpawned) {
     Start-Process -FilePath 'wscript.exe' -ArgumentList """$VbsPath""" -WorkingDirectory $RepoRoot
 }
 
