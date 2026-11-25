@@ -141,9 +141,12 @@ async function main() {
 
     const port = parseInt(fs.readFileSync(portFile, 'utf8').trim().split(/\r?\n/)[0], 10);
     const targets = await fetchJson(`http://127.0.0.1:${port}/json`);
-    const pages = (Array.isArray(targets) ? targets : []).filter(
-        (t) => t && t.type === 'page' && t.webSocketDebuggerUrl && String(t.url || '').includes('127.0.0.1')
-    );
+    const pages = (Array.isArray(targets) ? targets : []).filter((t) => {
+        if (!t || t.type !== 'page' || !t.webSocketDebuggerUrl) return false;
+        const url = String(t.url || '');
+        if (url.startsWith('devtools://') || url.startsWith('chrome-extension://') || url.includes('/view/sidecar')) return false;
+        return url.startsWith('https://127.0.0.1:') || url.includes('workbench') || url.includes('launchpad');
+    });
 
     if (pages.length === 0) {
         console.error(`[verify-cdp] No Antigravity CDP page targets found on port ${port}.`);

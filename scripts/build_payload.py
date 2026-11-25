@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 Compile themes/themes.json + engine/core.js into dist/theme_payload.js.
-Inlines local SVG and raster wallpaper assets (compressing >2560px rasters to WebP
-when Pillow is available) so the CDP runtime payload stays self-contained.
+Inlines local SVG and raster wallpaper assets with zero-decode WebP header passthrough
+(matching the speed of the Rust edition) and falls back to Pillow Lanczos resize only
+for oversized or non-WebP images.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import base64
 import io
 import json
 import mimetypes
+import struct
 import sys
 import urllib.parse
 from pathlib import Path
@@ -22,6 +24,27 @@ AVATAR_MAX_DIM = 256
 PLACEHOLDER = "/*__THEMES_PLACEHOLDER__*/{}"
 DEFAULT_MAX_DIM = 2560
 WEBP_QUALITY = 88
+WEBP_PASSTHROUGH_MAX_BYTES = int(1.2 * 1024 * 1024)
+
+
+def parse_webp_dimensions(raw: bytes) -> tuple[int, int] | None:
+    """Fast 0-allocation WebP header dimension reader (VP8, VP8L, VP8X)."""
+    if len(raw) < 30 or raw[:4] != b"RIFF" or raw[8:12] != b"WEBP":
+        return None
+    chunk = raw[12:16]
+    if chunk == b"VP8 " and len(raw) >= 30:
+        w, h = struct.unpack("<HH", raw[26:30])
+        return (w & 0x3FFF, h & 0x3FFF)
+    if chunk == b"VP8L" and len(raw) >= 25:
+        bits = struct.unpack("<I", raw[21:25])[0]
+        w = (bits & 0x3FFF) + 1
+        h = ((bits >> 14) & 0x3FFF) + 1
+        return (w, h)
+    if chunk == b"VP8X" and len(raw) >= 30:
+        w = int.from_bytes(raw[24:27], "little") + 1
+        h = int.from_bytes(raw[27:30], "little") + 1
+        return (w, h)
+    return None
 
 
 def encode_svg(svg_path: Path) -> str:
@@ -30,10 +53,20 @@ def encode_svg(svg_path: Path) -> str:
 
 
 def encode_raster(img_path: Path, max_dim: int) -> str:
+    raw = img_path.read_bytes()
+    ext = img_path.suffix.lower()
+
+    # Zero-decode fast passthrough for already-compressed WebP files within dimension & byte budget
+    if ext == ".webp" and len(raw) <= WEBP_PASSTHROUGH_MAX_BYTES:
+        dims = parse_webp_dimensions(raw)
+        if dims is not None:
+            longest_raw = max(dims[0], dims[1])
+            if max_dim <= 0 or longest_raw <= max_dim:
+                return f"data:image/webp;base64,{base64.b64encode(raw).decode('ascii')}"
+
     try:
         from PIL import Image, ImageOps
     except ImportError:
-        raw = img_path.read_bytes()
         mime, _ = mimetypes.guess_type(str(img_path))
         if not mime:
             mime = "image/png"
@@ -45,7 +78,7 @@ def encode_raster(img_path: Path, max_dim: int) -> str:
             )
         return f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
 
-    with Image.open(img_path) as img:
+    with Image.open(io.BytesIO(raw)) as img:
         img = ImageOps.exif_transpose(img)
         has_alpha = img.mode in ("RGBA", "LA", "PA") or (
             img.mode == "P" and "transparency" in img.info
@@ -60,11 +93,8 @@ def encode_raster(img_path: Path, max_dim: int) -> str:
             resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
             img = img.resize(new_size, resample)
 
-        # Keep existing small WebP bytes untouched if already within budget and not resized.
-        if img_path.suffix.lower() == ".webp" and longest <= max_dim:
-            raw = img_path.read_bytes()
-            if len(raw) <= 1.2 * 1024 * 1024:
-                return f"data:image/webp;base64,{base64.b64encode(raw).decode('ascii')}"
+        if ext == ".webp" and (max_dim <= 0 or longest <= max_dim) and len(raw) <= WEBP_PASSTHROUGH_MAX_BYTES:
+            return f"data:image/webp;base64,{base64.b64encode(raw).decode('ascii')}"
 
         buf = io.BytesIO()
         img.save(buf, format="WEBP", quality=WEBP_QUALITY, method=4)

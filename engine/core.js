@@ -1,4 +1,9 @@
-(() => {
+﻿(() => {
+  // Never run inside user web apps opened in Antigravity's split embedded browser
+  if (!window.electronNative && !document.querySelector('.agy-shell')) {
+    return 'Skipped non-Antigravity page';
+  }
+
   const THEMES = /*__THEMES_PLACEHOLDER__*/{};
   const THEME_KEYS = Object.keys(THEMES);
   const DEFAULT_THEME_KEY = THEME_KEYS[0] || 'Default';
@@ -78,7 +83,9 @@
           const sy = Math.max(0, Math.floor((natH - side) / 2));
           ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
           const out = canvas.toDataURL('image/webp', 0.88);
-          callback(out && out.startsWith('data:image/webp') ? out : canvas.toDataURL('image/png'));
+          canvas.width = 0;
+          canvas.height = 0;
+          callback(out && out.startsWith('data:image/webp') ? out : String(reader.result || ''));
         } catch (e) {
           callback(String(reader.result || ''));
         }
@@ -89,51 +96,237 @@
     reader.readAsDataURL(file);
   }
 
-  // Pre-bake L-shaped header/sidebar glass blur once per theme/dimming change to avoid per-frame GPU backdrop readback
-  function syncPrebakedGlass(wpUrl, overlayRgb, overlayAlpha, tintBg, blurStr) {
-    const shell = document.querySelector('.agy-shell');
+  // Downscale custom wallpaper uploads to max 2560px WebP so localStorage & theme_config.json stay compact
+  function compressWallpaperFile(file, callback) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const raw = String(reader.result || '');
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDim = 2560;
+          const natW = img.naturalWidth || 1920;
+          const natH = img.naturalHeight || 1080;
+          const longest = Math.max(natW, natH);
+          if (file.type === 'image/webp' && longest <= maxDim && file.size <= 1200 * 1024) {
+            callback(raw);
+            return;
+          }
+          const scale = longest > maxDim ? maxDim / longest : 1;
+          const w = Math.max(1, Math.round(natW * scale));
+          const h = Math.max(1, Math.round(natH * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            callback(raw);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          const out = canvas.toDataURL('image/webp', 0.86);
+          canvas.width = 0;
+          canvas.height = 0;
+          callback(out && out.startsWith('data:image/webp') ? out : raw);
+        } catch (e) {
+          callback(raw);
+        }
+      };
+      img.onerror = () => callback(raw);
+      img.src = raw;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const MAX_BLUR_CACHE = 4;
+
+  // Convert large base64 data: URIs into tiny ~60-byte blob: Object URLs so Blink never
+  // parses or inherits 700 KB CSS strings across thousands of DOM nodes.
+  function toShortBlobUrl(uri) {
+    if (!uri || !uri.startsWith('data:') || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+      return uri;
+    }
+    const cache = window.__AGY_BLOB_CACHE__ instanceof Map
+      ? window.__AGY_BLOB_CACHE__
+      : (window.__AGY_BLOB_CACHE__ = new Map());
+    const key = `${uri.slice(0, 80)}|${uri.length}|${uri.slice(-24)}`;
+    const existing = cache.get(key);
+    if (existing) return existing;
+    try {
+      const comma = uri.indexOf(',');
+      if (comma === -1) return uri;
+      const meta = uri.slice(5, comma);
+      const dataPart = uri.slice(comma + 1);
+      const mime = (meta.split(';')[0] || 'application/octet-stream').trim();
+      let blob;
+      if (meta.includes(';base64')) {
+        const bin = atob(dataPart);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        blob = new Blob([bytes], { type: mime });
+      } else {
+        blob = new Blob([decodeURIComponent(dataPart)], { type: mime });
+      }
+      const objUrl = URL.createObjectURL(blob);
+      cache.set(key, objUrl);
+      while (cache.size > 16) {
+        const oldestKey = cache.keys().next().value;
+        const oldUrl = cache.get(oldestKey);
+        cache.delete(oldestKey);
+        if (oldUrl && oldUrl.startsWith('blob:')) {
+          try { URL.revokeObjectURL(oldUrl); } catch (e) {}
+        }
+      }
+      return objUrl;
+    } catch (e) {
+      return uri;
+    }
+  }
+
+  function putBlurCache(key, val) {
+    const cache = window.__AGY_BLUR_CACHE__ || (window.__AGY_BLUR_CACHE__ = new Map());
+    if (cache.has(key)) cache.delete(key);
+    cache.set(key, val);
+    while (cache.size > MAX_BLUR_CACHE) {
+      const oldestKey = cache.keys().next().value;
+      const oldVal = cache.get(oldestKey);
+      cache.delete(oldestKey);
+      if (typeof oldVal === 'string' && oldVal.startsWith('blob:')) {
+        try { URL.revokeObjectURL(oldVal); } catch (e) {}
+      }
+    }
+  }
+
+  function flushMetricsStyle() {
+    const ms = window.__AGY_METRICS_STATE__ || (window.__AGY_METRICS_STATE__ = {
+      glassBg: '',
+      beforeClip: '',
+      holeClip: ''
+    });
+    let css = '';
+    if (ms.glassBg || ms.beforeClip) {
+      css += '.agy-shell::before{';
+      if (ms.glassBg) css += `background-image:${ms.glassBg}!important;`;
+      if (ms.beforeClip) css += `clip-path:${ms.beforeClip}!important;`;
+      css += '}';
+    }
+    if (ms.holeClip) {
+      css += `body[data-has-browser-hole="true"] .agy-shell[data-agy-hole-active="1"]::after{clip-path:${ms.holeClip}!important;}`;
+    }
+    if (css === window.__AGY_LAST_METRICS_CSS__) return;
+    window.__AGY_LAST_METRICS_CSS__ = css;
+    let el = document.getElementById('antigravity-custom-theme-metrics');
+    if (!el) {
+      el = document.createElement('style');
+      el.id = 'antigravity-custom-theme-metrics';
+      document.head.appendChild(el);
+    }
+    el.textContent = css;
+  }
+
+  // Pre-bake L-shaped header/sidebar glass blur (debounced + LRU-capped + blob: URL) to avoid per-frame GPU backdrop readback
+  function syncPrebakedGlass(wpUrl, overlayRgb, overlayAlpha, tintBg, blurStr, deferMs = 0) {
+    if (window.__AGY_BLUR_TIMER__) {
+      clearTimeout(window.__AGY_BLUR_TIMER__);
+      window.__AGY_BLUR_TIMER__ = 0;
+    }
+    const ms = window.__AGY_METRICS_STATE__ || (window.__AGY_METRICS_STATE__ = { glassBg: '', beforeClip: '', holeClip: '' });
     if (!wpUrl) {
-      if (shell) shell.style.removeProperty('--agy-l-glass-bg');
+      ms.glassBg = '';
+      flushMetricsStyle();
       return;
     }
     const key = `${wpUrl.slice(0, 64)}|${wpUrl.length}|${overlayRgb}|${overlayAlpha.toFixed(3)}|${tintBg}|${blurStr}`;
-    window.__AGY_BLUR_CACHE__ = window.__AGY_BLUR_CACHE__ || {};
-    const cached = window.__AGY_BLUR_CACHE__[key];
+    const cache = window.__AGY_BLUR_CACHE__ instanceof Map
+      ? window.__AGY_BLUR_CACHE__
+      : (window.__AGY_BLUR_CACHE__ = new Map());
+    const cached = cache.get(key);
     if (cached) {
-      if (shell) shell.style.setProperty('--agy-l-glass-bg', 'url("' + cached + '")');
+      putBlurCache(key, cached);
+      ms.glassBg = 'url("' + cached + '")';
+      flushMetricsStyle();
       return;
     }
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const w = 640;
-        const h = Math.max(180, Math.round((img.naturalHeight || 1440) * (w / (img.naturalWidth || 2560))));
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        const pxMatch = String(blurStr !== undefined ? blurStr : '3px').match(/(\d+(?:\.\d+)?)/);
-        const scaledBlur = Math.max(0, Math.min(16, Math.round((pxMatch ? parseFloat(pxMatch[1]) : 3) * 0.75)));
-        ctx.filter = scaledBlur > 0 ? `blur(${scaledBlur}px)` : 'none';
-        ctx.drawImage(img, -12, -12, w + 24, h + 24);
-        ctx.filter = 'none';
-        ctx.fillStyle = `rgba(${overlayRgb}, ${overlayAlpha})`;
-        ctx.fillRect(0, 0, w, h);
-        if (tintBg) {
-          ctx.fillStyle = tintBg;
+
+    const gen = (window.__AGY_BLUR_GEN__ = (window.__AGY_BLUR_GEN__ || 0) + 1);
+    const runBake = () => {
+      if (window.__AGY_BLUR_GEN__ !== gen) return;
+      const img = new Image();
+      img.onload = () => {
+        if (window.__AGY_BLUR_GEN__ !== gen) return;
+        try {
+          const w = 640;
+          const h = Math.max(180, Math.round((img.naturalHeight || 1440) * (w / (img.naturalWidth || 2560))));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          const pxMatch = String(blurStr !== undefined ? blurStr : '3px').match(/(\d+(?:\.\d+)?)/);
+          const scaledBlur = Math.max(0, Math.min(16, Math.round((pxMatch ? parseFloat(pxMatch[1]) : 3) * 0.75)));
+          ctx.filter = scaledBlur > 0 ? `blur(${scaledBlur}px)` : 'none';
+          ctx.drawImage(img, -12, -12, w + 24, h + 24);
+          ctx.filter = 'none';
+          ctx.fillStyle = `rgba(${overlayRgb}, ${overlayAlpha})`;
           ctx.fillRect(0, 0, w, h);
-        }
-        const baked = canvas.toDataURL('image/webp', 0.85);
-        window.__AGY_BLUR_CACHE__[key] = baked;
-        const curShell = document.querySelector('.agy-shell');
-        if (curShell) curShell.style.setProperty('--agy-l-glass-bg', 'url("' + baked + '")');
-      } catch (e) {}
+          if (tintBg) {
+            ctx.fillStyle = tintBg;
+            ctx.fillRect(0, 0, w, h);
+          }
+          const applyBakedUrl = (bakedUrl) => {
+            canvas.width = 0;
+            canvas.height = 0;
+            if (!bakedUrl || window.__AGY_BLUR_GEN__ !== gen) {
+              if (bakedUrl && bakedUrl.startsWith('blob:')) {
+                try { URL.revokeObjectURL(bakedUrl); } catch (e) {}
+              }
+              return;
+            }
+            putBlurCache(key, bakedUrl);
+            const curMs = window.__AGY_METRICS_STATE__ || (window.__AGY_METRICS_STATE__ = { glassBg: '', beforeClip: '', holeClip: '' });
+            curMs.glassBg = 'url("' + bakedUrl + '")';
+            flushMetricsStyle();
+          };
+          if (typeof canvas.toBlob === 'function' && typeof URL.createObjectURL === 'function') {
+            canvas.toBlob((blob) => {
+              if (blob) applyBakedUrl(URL.createObjectURL(blob));
+              else applyBakedUrl(canvas.toDataURL('image/webp', 0.85));
+            }, 'image/webp', 0.85);
+          } else {
+            applyBakedUrl(canvas.toDataURL('image/webp', 0.85));
+          }
+        } catch (e) {}
+      };
+      img.src = wpUrl;
     };
-    img.src = wpUrl;
+
+    if (deferMs > 0) {
+      window.__AGY_BLUR_TIMER__ = setTimeout(runBake, deferMs);
+    } else {
+      runBake();
+    }
   }
 
-  function applyTheme(overrides = {}) {
+  function persistThemeConfig(st, debounce) {
+    if (typeof window.agySaveThemeConfig !== 'function') return;
+    if (window.__AGY_SAVE_TIMER__) {
+      clearTimeout(window.__AGY_SAVE_TIMER__);
+      window.__AGY_SAVE_TIMER__ = 0;
+    }
+    const flush = () => {
+      window.__AGY_SAVE_TIMER__ = 0;
+      try {
+        window.agySaveThemeConfig(JSON.stringify(st));
+      } catch (e) {}
+    };
+    if (debounce) {
+      window.__AGY_SAVE_TIMER__ = setTimeout(flush, 200);
+    } else {
+      flush();
+    }
+  }
+
+  function applyTheme(overrides = {}, opts = {}) {
     const st = { ...getState(), ...overrides };
     try {
       localStorage.setItem(STORAGE_THEME, st.themeName);
@@ -151,25 +344,24 @@
         localStorage.setItem(STORAGE_AGENT_AVATAR, overrides.agentAvatar);
       }
       if (overrides.glassBlur !== undefined) {
-        localStorage.setItem(STORAGE_GLASS_BLUR, String(overrides.glassBlur));
+        localStorage.setItem(STORAGE_GLASS_BLUR, String(st.glassBlur));
       }
       if (overrides.avatarSize !== undefined) {
-        localStorage.setItem(STORAGE_AVATAR_SIZE, String(overrides.avatarSize));
+        localStorage.setItem(STORAGE_AVATAR_SIZE, String(st.avatarSize));
       }
       if (overrides.avatarRadius !== undefined) {
-        localStorage.setItem(STORAGE_AVATAR_RADIUS, String(overrides.avatarRadius));
+        localStorage.setItem(STORAGE_AVATAR_RADIUS, String(st.avatarRadius));
       }
     } catch (e) {}
 
-    if (window.agySaveThemeConfig) {
-      try {
-        window.agySaveThemeConfig(JSON.stringify(st));
-      } catch (e) {}
+    if (!opts.skipSave) {
+      persistThemeConfig(st, Boolean(opts.debounceSave));
     }
 
     const mainTheme = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY];
     const bubbleTheme = THEMES[st.bubbleName] || mainTheme;
-    const wpUrl = st.customWp || mainTheme.wallpaper || '';
+    const rawWpUrl = st.customWp || mainTheme.wallpaper || '';
+    const wpUrl = toShortBlobUrl(rawWpUrl);
 
     const oldLegacy = document.getElementById('antigravity-ho-ly-chibi-theme');
     if (oldLegacy) oldLegacy.remove();
@@ -207,10 +399,6 @@
         background-repeat: no-repeat !important;
         image-rendering: auto !important;
       }
-      /* Keep transparent scrollers on GPU composited-scrolling layers */
-      .agy-shell .overflow-y-auto {
-        will-change: scroll-position;
-      }
       .agy-sheet,
       .agy-inset-shell,
       .browser-hole-opaque,
@@ -220,7 +408,9 @@
       [class*="--shell-canvas"],
       .agy-shell div.absolute.bottom-0.pointer-events-none,
       .agy-shell [class*="z-50"] .pointer-events-none.right-full,
-      .agy-shell .bg-background:not(.settings-modal-container):not(.settings-modal-container *):not(#agy-custom-theme-modal-backdrop *) {
+      .agy-shell [data-main-content-body="true"] .bg-background,
+      .agy-shell [data-side-panel-body="true"] .bg-background,
+      .agy-shell [data-testid="sidebar-split"] .bg-background {
         background: transparent !important;
         background-color: transparent !important;
         background-image: none !important;
@@ -263,9 +453,10 @@
     `;
 
     const defaultCornerSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M2 20 L2 6 Q2 2 6 2 L20 2' stroke='%23fbbf24' stroke-width='1.5' fill='none' opacity='0.65'/%3E%3Ccircle cx='6' cy='6' r='2' fill='%23fbbf24' opacity='0.75'/%3E%3C/svg%3E";
-    const cornerFiligreeUrl = bubbleTheme.cornerSvg || defaultCornerSvg;
+    const cornerFiligreeUrl = toShortBlobUrl(bubbleTheme.cornerSvg || defaultCornerSvg);
+    const stickerUrl = toShortBlobUrl(bubbleTheme.sticker || '');
 
-    const bubbleStickerCss = bubbleTheme.sticker ? (bubbleTheme.isOrnament ? `
+    const bubbleStickerCss = stickerUrl ? (bubbleTheme.isOrnament ? `
       .group\\/user-input-step {
         padding-top: 18px !important;
       }
@@ -276,13 +467,12 @@
         right: ${bubbleTheme.stickerRight}px;
         width: ${bubbleTheme.stickerW}px;
         height: ${bubbleTheme.stickerH}px;
-        background-image: url("${bubbleTheme.sticker}");
+        background-image: url("${stickerUrl}");
         background-size: contain;
         background-position: center;
         background-repeat: no-repeat;
         z-index: 25;
         pointer-events: none;
-        transition: transform 0.2s ease;
       }
     ` : `
       .group\\/user-input-step {
@@ -295,19 +485,18 @@
         right: ${bubbleTheme.stickerRight}px;
         width: ${bubbleTheme.stickerW}px;
         height: ${bubbleTheme.stickerH}px;
-        background-image: url("${bubbleTheme.sticker}");
+        background-image: url("${stickerUrl}");
         background-size: contain;
         background-position: bottom center;
         background-repeat: no-repeat;
         z-index: 25;
         pointer-events: none;
-        transition: transform 0.2s ease;
       }
     `) : `
       .agy-user-bubble-frame::before { display: none !important; }
     `;
 
-    const showInputSticker = st.inputStyle !== 'minimal' && bubbleTheme.sticker;
+    const showInputSticker = st.inputStyle !== 'minimal' && stickerUrl;
     const inputStickerCss = showInputSticker ? (bubbleTheme.isOrnament ? `
       .surface-composer {
         margin-top: 16px !important;
@@ -320,7 +509,7 @@
         right: 16px;
         width: ${bubbleTheme.stickerW + 8}px;
         height: ${bubbleTheme.stickerH + 2}px;
-        background-image: url("${bubbleTheme.sticker}");
+        background-image: url("${stickerUrl}");
         background-size: contain;
         background-position: center;
         background-repeat: no-repeat;
@@ -354,7 +543,7 @@
         right: 16px;
         width: ${bubbleTheme.stickerW + 6}px;
         height: ${bubbleTheme.stickerH + 6}px;
-        background-image: url("${bubbleTheme.sticker}");
+        background-image: url("${stickerUrl}");
         background-size: contain;
         background-position: bottom center;
         background-repeat: no-repeat;
@@ -397,8 +586,8 @@
     const pillBorder = mainTheme.pillBorder || (isLight ? 'rgba(15, 23, 42, 0.16)' : 'rgba(255, 255, 255, 0.16)');
     const preCodeBg = isLight ? `rgba(${overlayRgb}, 0.72)` : `rgba(${overlayRgb}, 0.56)`;
 
-    const effectiveUserAvatar = st.userAvatar === 'none' ? '' : (st.userAvatar || mainTheme.userAvatar || '');
-    const effectiveAgentAvatar = st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || '');
+    const effectiveUserAvatar = toShortBlobUrl(st.userAvatar === 'none' ? '' : (st.userAvatar || mainTheme.userAvatar || ''));
+    const effectiveAgentAvatar = toShortBlobUrl(st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || ''));
     const avSize = Math.min(52, Math.max(22, Number(st.avatarSize) || 32));
     const avAgentSize = Math.max(22, avSize - 2);
     const avRadius = Math.min(50, Math.max(0, Number.isFinite(Number(st.avatarRadius)) ? Number(st.avatarRadius) : 50));
@@ -449,21 +638,25 @@
       ` : ''}
     `;
 
-    const sidebarEnhanceCss = (mainTheme.sidebarEnhanceText || isLight) ? `
+    const sidebarEnhanceCss = isLight ? `
       .agy-shell .bg-sidebar a,
       .agy-shell .bg-sidebar span,
       .agy-shell .bg-sidebar button {
-        color: ${isLight ? uiInk : 'inherit'};
-        text-shadow: ${isLight ? 'none' : '0 1px 3px rgba(0, 0, 0, 0.88)'};
+        color: ${uiInk};
       }
       .agy-shell .bg-sidebar .text-muted-foreground,
       .agy-shell .bg-sidebar .text-secondary-foreground {
         color: ${uiMutedInk} !important;
       }
-    ` : '';
+    ` : (mainTheme.sidebarEnhanceText ? `
+      .agy-shell .bg-sidebar .text-muted-foreground,
+      .agy-shell .bg-sidebar .text-secondary-foreground {
+        color: ${uiMutedInk} !important;
+      }
+    ` : '');
 
     const aiCardCss = mainTheme.aiCardBg ? `
-      /* Translucent reading card for AI responses (zero live backdrop-filter for max 120fps scroll) */
+      /* Translucent reading card for AI responses (zero live backdrop-filter, lightweight shadow) */
       .agy-shell [data-testid="agent-response"] {
         background: ${mainTheme.aiCardBg} !important;
         ${isLight ? `color: ${uiInk} !important;` : ''}
@@ -471,7 +664,7 @@
         border: 1px solid ${mainTheme.aiCardBorder || (isLight ? 'rgba(15, 23, 42, 0.12)' : 'rgba(255, 255, 255, 0.1)')} !important;
         border-radius: 14px !important;
         padding: 12px 16px !important;
-        box-shadow: ${isLight ? '0 4px 14px rgba(15, 23, 42, 0.08)' : '0 4px 14px rgba(0, 0, 0, 0.28)'} !important;
+        box-shadow: none !important;
         box-sizing: border-box !important;
         overflow: hidden !important;
       }
@@ -488,8 +681,7 @@
         transform: none !important;
         box-sizing: border-box !important;
       }
-      .agy-shell [data-testid="agent-response"] .md-table-scroll,
-      .agy-shell [data-testid="agent-response"] :has(> table):not(.md-table-frame) {
+      .agy-shell [data-testid="agent-response"] .md-table-scroll {
         display: block !important;
         width: 100% !important;
         min-width: 0 !important;
@@ -535,19 +727,19 @@
         scrollbar-width: auto !important;
         scrollbar-color: auto !important;
       }
-      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, :has(> table):not(.md-table-frame), .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar {
+      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar {
         height: 8px !important;
         display: block !important;
       }
-      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, :has(> table):not(.md-table-frame), .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar-track {
+      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar-track {
         background: ${isLight ? 'rgba(15, 23, 42, 0.06)' : 'rgba(255, 255, 255, 0.06)'} !important;
         border-radius: 9999px !important;
       }
-      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, :has(> table):not(.md-table-frame), .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar-thumb {
+      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar-thumb {
         background: ${isLight ? 'rgba(15, 23, 42, 0.34)' : 'rgba(148, 163, 184, 0.48)'} !important;
         border-radius: 9999px !important;
       }
-      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, :has(> table):not(.md-table-frame), .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar-thumb:hover {
+      .agy-shell [data-testid="agent-response"] :is(.md-table-scroll, .md-math-display, .katex-display, :not(.md-math-display):not(.katex-display) > .katex)::-webkit-scrollbar-thumb:hover {
         background: ${isLight ? 'rgba(15, 23, 42, 0.54)' : 'rgba(148, 163, 184, 0.72)'} !important;
       }
       .agy-shell [data-testid="agent-response"] table {
@@ -586,40 +778,21 @@
     }
     if (useUnifiedGlass) {
       const effectiveBlur = Number.isFinite(st.glassBlur) ? `${st.glassBlur}px` : (mainTheme.headerBlur || '3px');
-      syncPrebakedGlass(wpUrl, overlayRgb, overlayAlpha, mainTheme.headerBg || '', effectiveBlur);
+      syncPrebakedGlass(wpUrl, overlayRgb, overlayAlpha, mainTheme.headerBg || '', effectiveBlur, opts.debounceSave ? 80 : 0);
     } else {
       syncPrebakedGlass(null);
     }
 
     const sidePanelCss = st.wpEnabled ? `
       /* Frosted pre-baked glass + dark/light reading scrim for right-side Artifact / Text / Diff split panels */
-      ${useUnifiedGlass ? `
-      .agy-shell[data-agy-side-glass="1"]::before {
-        clip-path: polygon(
-          evenodd,
-          0 0,
-          100% 0,
-          100% var(--agy-hdr-h, 75px),
-          var(--agy-sidebar-w, 256px) var(--agy-hdr-h, 75px),
-          var(--agy-sidebar-w, 256px) 100%,
-          0 100%,
-          0 0,
-          var(--agy-side-l, 100%) var(--agy-side-t, 75px),
-          var(--agy-side-r, 100%) var(--agy-side-t, 75px),
-          var(--agy-side-r, 100%) var(--agy-side-b, 100%),
-          var(--agy-side-l, 100%) var(--agy-side-b, 100%),
-          var(--agy-side-l, 100%) var(--agy-side-t, 75px)
-        ) !important;
-      }
-      ` : ''}
-      body:not([data-has-browser-hole="true"]) .agy-shell [data-side-panel-body="true"]:not([data-has-browser-hole="true"]):not(:has([data-browser-hole]:not([data-browser-hole="false"]))) {
+      body:not([data-has-browser-hole="true"]) .agy-shell [data-side-panel-body="true"]:not([data-has-browser-hole="true"]) {
         background: ${mainTheme.aiCardBg || `rgba(${overlayRgb}, 0.72)`} !important;
         ${isLight ? `color: ${uiInk} !important;` : ''}
         backdrop-filter: none !important;
         border-left: 1px solid ${mainTheme.aiCardBorder || (isLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(255, 255, 255, 0.14)')} !important;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
       }
-      body:not([data-has-browser-hole="true"]) .agy-shell [data-side-panel-body="true"]:not([data-has-browser-hole="true"]):not(:has([data-browser-hole]:not([data-browser-hole="false"]))) pre {
+      body:not([data-has-browser-hole="true"]) .agy-shell [data-side-panel-body="true"]:not([data-has-browser-hole="true"]) pre {
         background: ${preCodeBg} !important;
         border: 1px solid ${mainTheme.aiCardBorder || (isLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(255, 255, 255, 0.14)')} !important;
         border-radius: 10px !important;
@@ -651,20 +824,13 @@
         z-index: 1;
         pointer-events: none;
         background-color: ${mainTheme.headerBg};
-        background-image: var(--agy-l-glass-bg, none);
+        background-image: none;
         background-size: cover;
         background-position: ${bgPosition};
         background-repeat: no-repeat;
         backdrop-filter: none !important;
         will-change: transform;
-        clip-path: polygon(
-          0 0,
-          100% 0,
-          100% var(--agy-hdr-h, 75px),
-          var(--agy-sidebar-w, 256px) var(--agy-hdr-h, 75px),
-          var(--agy-sidebar-w, 256px) 100%,
-          0 100%
-        );
+        clip-path: polygon(0 0, 100% 0, 100% 75px, 256px 75px, 256px 100%, 0 100%);
       }
       .agy-shell [class*="@container/titlebar"] {
         background: transparent !important;
@@ -753,7 +919,7 @@
       .agy-user-bubble-frame {
         background: ${bubbleTheme.frameBg} !important;
         border-radius: ${bubbleTheme.isScroll ? '6px' : '14px'} !important;
-        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 12px ${bubbleTheme.glow} !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28) !important;
         position: relative !important;
         overflow: visible !important;
         padding: 1.2px !important;
@@ -920,11 +1086,42 @@
 
   function removeCustomTheme() {
     clearTitleBarTimers();
+    if (window.__AGY_SAVE_TIMER__) { clearTimeout(window.__AGY_SAVE_TIMER__); window.__AGY_SAVE_TIMER__ = 0; }
+    if (window.__AGY_BLUR_TIMER__) { clearTimeout(window.__AGY_BLUR_TIMER__); window.__AGY_BLUR_TIMER__ = 0; }
+    if (window.__AGY_TICK_TIMER__) { clearTimeout(window.__AGY_TICK_TIMER__); window.__AGY_TICK_TIMER__ = 0; }
+    if (window.__AGY_BLUR_CACHE__ instanceof Map) {
+      window.__AGY_BLUR_CACHE__.forEach((v) => {
+        if (typeof v === 'string' && v.startsWith('blob:')) {
+          try { URL.revokeObjectURL(v); } catch (e) {}
+        }
+      });
+      window.__AGY_BLUR_CACHE__.clear();
+    }
+    if (window.__AGY_BLOB_CACHE__ instanceof Map) {
+      window.__AGY_BLOB_CACHE__.forEach((v) => {
+        if (typeof v === 'string' && v.startsWith('blob:')) {
+          try { URL.revokeObjectURL(v); } catch (e) {}
+        }
+      });
+      window.__AGY_BLOB_CACHE__.clear();
+    }
+    if (window.__AGY_SHELL_RO__) {
+      try { window.__AGY_SHELL_RO__.disconnect(); } catch (e) {}
+      window.__AGY_SHELL_RO__ = null;
+    }
+    if (window.__AGY_MODAL_OBSERVER__) {
+      try { window.__AGY_MODAL_OBSERVER__.disconnect(); } catch (e) {}
+      window.__AGY_MODAL_OBSERVER__ = null;
+    }
     if (window.__AGY_SCROLL_AC__) {
       try { window.__AGY_SCROLL_AC__.abort(); } catch (e) {}
     }
     const styleEl = document.getElementById('antigravity-custom-theme-active');
     if (styleEl) styleEl.remove();
+    const metricsEl = document.getElementById('antigravity-custom-theme-metrics');
+    if (metricsEl) metricsEl.remove();
+    window.__AGY_LAST_METRICS_CSS__ = '';
+    window.__AGY_METRICS_STATE__ = { glassBg: '', beforeClip: '', holeClip: '' };
     const navBtn = document.getElementById('agy-custom-theme-sidebar-btn');
     if (navBtn) navBtn.remove();
     const settingsBtn = document.getElementById('agy-custom-theme-settings-btn');
@@ -933,9 +1130,9 @@
     if (modal) modal.remove();
     const shell = document.querySelector('.agy-shell');
     if (shell) {
-      delete shell.dataset.agyHoleActive;
-      shell.style.removeProperty('--agy-hole-clip');
-      shell.style.removeProperty('--agy-l-glass-bg');
+      if (shell.dataset.agyHoleActive) delete shell.dataset.agyHoleActive;
+      if (shell.dataset.agySideGlass) delete shell.dataset.agySideGlass;
+      ['--agy-hole-clip', '--agy-l-glass-bg', '--agy-sidebar-w', '--agy-hdr-h', '--agy-side-l', '--agy-side-t', '--agy-side-r', '--agy-side-b'].forEach((p) => shell.style.removeProperty(p));
     }
     if (window.electronNative && typeof window.electronNative.setTitleBarOverlay === 'function') {
       try {
@@ -992,7 +1189,7 @@
         if (e.key === 'Escape' && backdrop.style.display !== 'none') {
           backdrop.style.display = 'none';
         }
-      });
+      }, window.__AGY_SCROLL_AC__ ? { signal: window.__AGY_SCROLL_AC__.signal } : undefined);
     }
 
     backdrop.style.display = 'flex';
@@ -1236,7 +1433,7 @@
     slider.addEventListener('input', (e) => {
       const v = parseInt(e.target.value, 10);
       valLabel.textContent = v + '%';
-      applyTheme({ dimming: v });
+      applyTheme({ dimming: v }, { debounceSave: true });
     });
 
     const wpToggle = container.querySelector('#agy-wp-toggle');
@@ -1248,13 +1445,11 @@
     wpUpload.addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        applyTheme({ customWp: reader.result, wpEnabled: true });
+      compressWallpaperFile(file, (dataUrl) => {
+        applyTheme({ customWp: dataUrl, wpEnabled: true });
         const toggle = container.querySelector('#agy-wp-toggle');
         if (toggle) toggle.checked = true;
-      };
-      reader.readAsDataURL(file);
+      });
     });
 
     const userAvUpload = container.querySelector('#agy-user-av-upload');
@@ -1316,7 +1511,7 @@
       blurSlider.addEventListener('input', (e) => {
         const v = parseInt(e.target.value, 10);
         if (blurLabel) blurLabel.textContent = v + 'px';
-        applyTheme({ glassBlur: v });
+        applyTheme({ glassBlur: v }, { debounceSave: true });
       });
     }
 
@@ -1326,7 +1521,7 @@
       avSizeSlider.addEventListener('input', (e) => {
         const v = parseInt(e.target.value, 10);
         if (avSizeVal) avSizeVal.textContent = v + 'px';
-        applyTheme({ avatarSize: v });
+        applyTheme({ avatarSize: v }, { debounceSave: true });
       });
     }
 
@@ -1338,7 +1533,7 @@
         if (avRadVal) avRadVal.textContent = v + '%';
         if (userAvPreview) userAvPreview.style.borderRadius = v + '%';
         if (agentAvPreview) agentAvPreview.style.borderRadius = v + '%';
-        applyTheme({ avatarRadius: v });
+        applyTheme({ avatarRadius: v }, { debounceSave: true });
       });
     }
 
@@ -1520,7 +1715,9 @@
   function injectMainSidebarButton() {
     if (document.getElementById('agy-custom-theme-sidebar-btn')) return;
 
-    const sidebars = Array.from(document.querySelectorAll('.bg-sidebar'));
+    const sidebars = Array.from(
+      document.querySelectorAll('[data-testid="sidebar-split"] > :first-child, aside, [data-sidebar="true"], .bg-sidebar')
+    );
     let customSpan = null;
     for (const sb of sidebars) {
       const spans = Array.from(sb.querySelectorAll('span'));
@@ -1605,14 +1802,20 @@
   function syncShellMetrics() {
     const shell = document.querySelector('.agy-shell');
     if (!shell) return;
+    const ms = window.__AGY_METRICS_STATE__ || (window.__AGY_METRICS_STATE__ = {
+      glassBg: '',
+      beforeClip: '',
+      holeClip: ''
+    });
+
     const split = shell.querySelector('[data-testid="sidebar-split"]');
     const sidebarPane = split ? split.firstElementChild : null;
     const titleBar = shell.querySelector('[class*="@container/titlebar"]');
     const sw = sidebarPane ? Math.round(sidebarPane.getBoundingClientRect().width) : 0;
     const shellRect = shell.getBoundingClientRect();
     const hdrBottom = titleBar ? Math.round(titleBar.getBoundingClientRect().bottom - shellRect.top) : 35;
-    shell.style.setProperty('--agy-sidebar-w', sw + 'px');
-    shell.style.setProperty('--agy-hdr-h', hdrBottom + 'px');
+
+    const baseLClip = `polygon(0 0, 100% 0, 100% ${hdrBottom}px, ${sw}px ${hdrBottom}px, ${sw}px 100%, 0 100%)`;
 
     const hasHoleAttr = document.body.getAttribute('data-has-browser-hole') === 'true';
     const holeEl = hasHoleAttr ? shell.querySelector('[data-browser-hole]:not([data-browser-hole="false"])') : null;
@@ -1627,18 +1830,20 @@
         const t = Math.max(0, Math.round(hRect.top - shellRect.top));
         const r = Math.max(l, Math.round(hRect.right - shellRect.left));
         const b = Math.max(t, Math.round(hRect.bottom - shellRect.top));
-        shell.style.setProperty(
-          '--agy-hole-clip',
-          `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${l}px ${t}px, ${r}px ${t}px, ${r}px ${b}px, ${l}px ${b}px, ${l}px ${t}px)`
-        );
-        shell.dataset.agyHoleActive = '1';
-        delete shell.dataset.agySideGlass;
+        ms.beforeClip = baseLClip;
+        ms.holeClip = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${l}px ${t}px, ${r}px ${t}px, ${r}px ${b}px, ${l}px ${b}px, ${l}px ${t}px)`;
+        if (shell.dataset.agyHoleActive !== '1') {
+          shell.dataset.agyHoleActive = '1';
+        }
+        flushMetricsStyle();
         return;
       }
     }
     window.__AGY_HOLE_EL__ = null;
-    delete shell.dataset.agyHoleActive;
-    shell.style.removeProperty('--agy-hole-clip');
+    if (shell.dataset.agyHoleActive) {
+      delete shell.dataset.agyHoleActive;
+    }
+    ms.holeClip = '';
 
     const sideBody = shell.querySelector('[data-side-panel-body="true"]');
     if (sideBody) {
@@ -1654,55 +1859,130 @@
         const sr = Math.min(Math.round(shellRect.width), Math.max(sl, Math.round(sRect.right - shellRect.left)));
         const sb = Math.min(Math.round(shellRect.height), Math.max(st, Math.round(sRect.bottom - shellRect.top)));
         if (sr - sl > 20 && sb - st > 20) {
-          shell.style.setProperty('--agy-side-l', sl + 'px');
-          shell.style.setProperty('--agy-side-t', st + 'px');
-          shell.style.setProperty('--agy-side-r', sr + 'px');
-          shell.style.setProperty('--agy-side-b', sb + 'px');
-          shell.dataset.agySideGlass = '1';
+          ms.beforeClip = `polygon(evenodd, 0 0, 100% 0, 100% ${hdrBottom}px, ${sw}px ${hdrBottom}px, ${sw}px 100%, 0 100%, 0 0, ${sl}px ${st}px, ${sr}px ${st}px, ${sr}px ${sb}px, ${sl}px ${sb}px, ${sl}px ${st}px)`;
+          flushMetricsStyle();
           return;
         }
       }
+    } else {
+      window.__AGY_SIDE_EL__ = null;
     }
-    delete shell.dataset.agySideGlass;
+    ms.beforeClip = baseLClip;
+    flushMetricsStyle();
   }
 
-  function hookShellMetrics() {
+  function scheduleMetricsSync() {
+    if (window.__AGY_METRICS_RAF__) return;
+    window.__AGY_METRICS_RAF__ = requestAnimationFrame(() => {
+      window.__AGY_METRICS_RAF__ = 0;
+      syncShellMetrics();
+    });
+  }
+
+  function hookShellMetrics(forceSync = false) {
     const shell = document.querySelector('.agy-shell');
     if (!shell) return;
+    let needsSync = forceSync;
     if (!shell.dataset.agyTboMounted) {
       shell.dataset.agyTboMounted = '1';
+      // Strip any legacy inline CSS vars left by older versions so .agy-shell never inherits bloat.
+      if (shell.dataset.agySideGlass) delete shell.dataset.agySideGlass;
+      ['--agy-hole-clip', '--agy-l-glass-bg', '--agy-sidebar-w', '--agy-hdr-h', '--agy-side-l', '--agy-side-t', '--agy-side-r', '--agy-side-b'].forEach((p) => {
+        if (shell.style.getPropertyValue(p)) shell.style.removeProperty(p);
+      });
+      flushMetricsStyle();
       scheduleTitleBarSync();
+      needsSync = true;
     }
     if (!window.__AGY_SHELL_RO__ && typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(syncShellMetrics);
+      const ro = new ResizeObserver(scheduleMetricsSync);
       ro.observe(shell);
       const sidebarPane = shell.querySelector('[data-testid="sidebar-split"]')?.firstElementChild;
       if (sidebarPane) ro.observe(sidebarPane);
       window.__AGY_SHELL_RO__ = ro;
+      needsSync = true;
     }
-    syncShellMetrics();
+    if (!needsSync) {
+      const hasHoleAttr = document.body.getAttribute('data-has-browser-hole') === 'true';
+      const holeEl = hasHoleAttr ? shell.querySelector('[data-browser-hole]:not([data-browser-hole="false"])') : null;
+      const sideBody = shell.querySelector('[data-side-panel-body="true"]');
+      const sideHasContent = Boolean(sideBody && sideBody.children.length > 0);
+      if (
+        holeEl !== window.__AGY_HOLE_EL__ ||
+        sideBody !== window.__AGY_SIDE_EL__ ||
+        sideHasContent !== Boolean(window.__AGY_SIDE_HAS_CONTENT__)
+      ) {
+        window.__AGY_SIDE_HAS_CONTENT__ = sideHasContent;
+        needsSync = true;
+      }
+    }
+    if (needsSync) {
+      syncShellMetrics();
+    }
   }
 
-  function tick() {
+  function tick(forceMetrics = false) {
     injectMainSidebarButton();
     injectSettingsModalButton();
     hookSidebarScroll();
-    hookShellMetrics();
+    hookShellMetrics(forceMetrics);
   }
 
-  function scheduleTick() {
-    if (window.__AGY_TICK_RAF__) return;
-    window.__AGY_TICK_RAF__ = requestAnimationFrame(() => {
-      window.__AGY_TICK_RAF__ = 0;
-      tick();
-    });
+  function scheduleTick(mutations) {
+    const attrChanged = Array.isArray(mutations) && mutations.some((m) => m.type === 'attributes');
+    if (attrChanged) {
+      window.__AGY_FORCE_METRICS__ = true;
+      if (window.__AGY_TICK_TIMER__) {
+        clearTimeout(window.__AGY_TICK_TIMER__);
+        window.__AGY_TICK_TIMER__ = 0;
+      }
+      if (!window.__AGY_TICK_RAF__) {
+        window.__AGY_TICK_RAF__ = requestAnimationFrame(() => {
+          window.__AGY_TICK_RAF__ = 0;
+          const force = Boolean(window.__AGY_FORCE_METRICS__);
+          window.__AGY_FORCE_METRICS__ = false;
+          tick(force);
+        });
+      }
+      return;
+    }
+    if (window.__AGY_TICK_RAF__ || window.__AGY_TICK_TIMER__) return;
+    const mounted = Boolean(document.getElementById('agy-custom-theme-sidebar-btn'));
+    if (!mounted) {
+      window.__AGY_TICK_RAF__ = requestAnimationFrame(() => {
+        window.__AGY_TICK_RAF__ = 0;
+        tick(false);
+      });
+    } else {
+      window.__AGY_TICK_TIMER__ = setTimeout(() => {
+        window.__AGY_TICK_TIMER__ = 0;
+        tick(false);
+      }, 120);
+    }
   }
 
   clearTitleBarTimers();
+  if (window.__AGY_SAVE_TIMER__) {
+    clearTimeout(window.__AGY_SAVE_TIMER__);
+    window.__AGY_SAVE_TIMER__ = 0;
+  }
+  if (window.__AGY_BLUR_TIMER__) {
+    clearTimeout(window.__AGY_BLUR_TIMER__);
+    window.__AGY_BLUR_TIMER__ = 0;
+  }
+  if (window.__AGY_TICK_TIMER__) {
+    clearTimeout(window.__AGY_TICK_TIMER__);
+    window.__AGY_TICK_TIMER__ = 0;
+  }
   if (window.__AGY_TICK_RAF__) {
     cancelAnimationFrame(window.__AGY_TICK_RAF__);
     window.__AGY_TICK_RAF__ = 0;
   }
+  if (window.__AGY_METRICS_RAF__) {
+    cancelAnimationFrame(window.__AGY_METRICS_RAF__);
+    window.__AGY_METRICS_RAF__ = 0;
+  }
+  window.__AGY_LAST_METRICS_CSS__ = '';
   if (window.__AGY_SHELL_RO__) {
     try { window.__AGY_SHELL_RO__.disconnect(); } catch (e) {}
     window.__AGY_SHELL_RO__ = null;
@@ -1726,6 +2006,9 @@
   if (staleSettingsBtn) staleSettingsBtn.remove();
 
   window.__AGY_HOLE_EL__ = null;
+  window.__AGY_SIDE_EL__ = null;
+  window.__AGY_SIDE_HAS_CONTENT__ = false;
+  window.__AGY_FORCE_METRICS__ = false;
   if (window.__AGY_MODAL_OBSERVER__) {
     window.__AGY_MODAL_OBSERVER__.disconnect();
   }
@@ -1736,7 +2019,9 @@
     attributes: true,
     attributeFilter: ['data-has-browser-hole', 'data-browser-hole']
   });
-  tick();
+  tick(true);
 
   return 'Antigravity Custom Theme Engine Ready!';
 })();
+
+

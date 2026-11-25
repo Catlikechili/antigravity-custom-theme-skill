@@ -2,9 +2,12 @@
 'use strict';
 
 /**
- * Antigravity Custom Theme Daemon (Windows / macOS / Linux)
- * Connects to Antigravity CDP (DevToolsActivePort), injects dist/theme_payload.js,
- * persists user theme preferences in theme_config.json, and hot-reloads on rebuild.
+ * Antigravity Custom Theme Daemon (Optimized Ultra-Low-RAM Edition)
+ * - Skips `Runtime.enable` to prevent Electron V8 console RemoteObject heap retention
+ * - Cleans up old `Page.addScriptToEvaluateOnNewDocument` scripts on hot-reload
+ * - Uses ~150-byte Delta Sync (`__ANTIGRAVITY_APPLY_CUSTOM_THEME__(..., { skipSave: true })`) across windows
+ * - Strictly filters `https://127.0.0.1:` (excluding `/view/sidecar` & `http://127.0.0.1:` user dev servers)
+ * - Reads `dist/theme_payload.js` on-demand so large wallpaper strings never sit in idle daemon RAM
  */
 
 const fs = require('fs');
@@ -116,7 +119,9 @@ function readConfig() {
 function saveConfig(next) {
     try {
         const merged = { ...readConfig(), ...next };
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf8');
+        const tmpFile = `${CONFIG_FILE}.tmp`;
+        fs.writeFileSync(tmpFile, JSON.stringify(merged, null, 2), 'utf8');
+        fs.renameSync(tmpFile, CONFIG_FILE);
         return merged;
     } catch (err) {
         log(`Failed saving theme_config.json: ${err.message}`);
@@ -174,6 +179,26 @@ function fetchJson(url) {
     });
 }
 
+function filterAntigravityPages(targets) {
+    if (!Array.isArray(targets)) return [];
+    return targets.filter((t) => {
+        if (!t || t.type !== 'page' || !t.webSocketDebuggerUrl) return false;
+        const url = String(t.url || '');
+        if (
+            url.startsWith('devtools://') ||
+            url.startsWith('chrome-extension://') ||
+            url.startsWith('about:') ||
+            url.startsWith('data:') ||
+            url.includes('/view/sidecar')
+        ) {
+            return false;
+        }
+        // Only attach to Antigravity's internal HTTPS UI or workbench/launchpad,
+        // never to user http://127.0.0.1:<port> dev servers inside the split browser!
+        return url.startsWith('https://127.0.0.1:') || url.includes('workbench') || url.includes('launchpad');
+    });
+}
+
 const sessions = new Map();
 let lastPort = null;
 let reloadTimer = null;
@@ -181,6 +206,7 @@ let reloadTimer = null;
 function createSession(target) {
     const ws = new globalThis.WebSocket(target.webSocketDebuggerUrl);
     let nextId = 1;
+    let docScriptId = null;
     const pending = new Map();
     const session = { id: target.id, ws, target };
     sessions.set(target.id, session);
@@ -198,10 +224,35 @@ function createSession(target) {
     }
 
     session.reinject = async () => {
-        const src = buildInjectedSource();
+        let src = buildInjectedSource();
         if (!src) return;
         try {
+            if (docScriptId) {
+                const oldId = docScriptId;
+                docScriptId = null;
+                try {
+                    await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: oldId });
+                } catch (_) {}
+            }
+            const regRes = await send('Page.addScriptToEvaluateOnNewDocument', { source: src });
+            if (regRes && regRes.identifier) {
+                docScriptId = regRes.identifier;
+            }
             await send('Runtime.evaluate', { expression: src, awaitPromise: false });
+        } catch (_) {
+        } finally {
+            src = null;
+            if (typeof global.gc === 'function') {
+                try { global.gc(); } catch (_) {}
+            }
+        }
+    };
+
+    // ~150-byte Delta Sync across multiple windows without re-injecting 1MB payload
+    session.syncConfig = async (cfgJson) => {
+        const expr = `if (typeof window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__ === 'function') { window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__(${cfgJson}, { skipSave: true }); }`;
+        try {
+            await send('Runtime.evaluate', { expression: expr, awaitPromise: false });
         } catch (_) {}
     };
 
@@ -223,11 +274,12 @@ function createSession(target) {
 
         if (msg.method === 'Runtime.bindingCalled' && msg.params && msg.params.name === 'agySaveThemeConfig') {
             try {
-                const payload = JSON.parse(msg.params.payload || '{}');
+                const rawPayload = msg.params.payload || '{}';
+                const payload = JSON.parse(rawPayload);
                 saveConfig(payload);
                 for (const other of sessions.values()) {
                     if (other.id !== target.id) {
-                        other.reinject();
+                        other.syncConfig(rawPayload);
                     }
                 }
             } catch (err) {
@@ -237,23 +289,26 @@ function createSession(target) {
         }
 
         if (msg.method === 'Page.frameNavigated' && msg.params && msg.params.frame && !msg.params.frame.parentId) {
-            await session.reinject();
+            let src = buildInjectedSource();
+            if (src) {
+                try {
+                    await send('Runtime.evaluate', { expression: src, awaitPromise: false });
+                } catch (_) {}
+                src = null;
+            }
         }
     });
 
     ws.addEventListener('open', async () => {
         try {
+            // Only enable Page; deliberately skip Runtime.enable so Electron V8 never
+            // retains console stack traces or RemoteObject heap references.
             await send('Page.enable');
-            await send('Runtime.enable');
             try {
                 await send('Runtime.addBinding', { name: 'agySaveThemeConfig' });
             } catch (_) {}
 
-            const src = buildInjectedSource();
-            if (src) {
-                await send('Page.addScriptToEvaluateOnNewDocument', { source: src });
-                await send('Runtime.evaluate', { expression: src, awaitPromise: false });
-            }
+            await session.reinject();
             log(`Attached target ${target.id} (${target.url})`);
         } catch (err) {
             log(`Attach error for ${target.id}: ${err.message}`);
@@ -291,16 +346,10 @@ async function scanPages() {
     } catch (_) {
         return;
     }
-    if (!Array.isArray(targets)) return;
 
-    const pages = targets.filter((t) => {
-        if (!t || t.type !== 'page' || !t.webSocketDebuggerUrl) return false;
-        const url = String(t.url || '');
-        if (url.startsWith('devtools://') || url.startsWith('chrome-extension://')) return false;
-        return url.includes('127.0.0.1') || url.includes('workbench') || url.includes('launchpad');
-    });
-
+    const pages = filterAntigravityPages(targets);
     const liveIds = new Set(pages.map((p) => p.id));
+
     for (const [id, session] of sessions.entries()) {
         if (!liveIds.has(id)) {
             try {
