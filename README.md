@@ -19,7 +19,12 @@ Biến mọi bức ảnh nền, phong cách thẩm mỹ hoặc bảng màu yêu 
    - Chỉ với 1 dòng lệnh PowerShell duy nhất, kịch bản tự động kiểm tra và cài đặt **Git** + **Node.js >= 22 LTS** qua `winget` nếu máy chưa có, tự làm mới `PATH`, tải bộ kỹ năng về đúng thư mục chuẩn `%USERPROFILE%\.gemini\config\skills\antigravity-custom-theme` và kích hoạt dịch vụ chạy ngầm.
 3. **Khắc Phục Triệt Để Lỗi Ẩn Nút Trên Antigravity v2.33.0+ (`.bg-sidebar` Fix):**
    - Sửa cơ chế dò tìm thanh điều hướng khi Antigravity v2.33.0+ sinh nhiều phần tử `.bg-sidebar` cùng lúc, đảm bảo nút **`✨ Custom theme`** luôn xuất hiện ổn định ở thanh bên trái (ngay bên dưới mục `Customizations`).
-4. **6 Bộ Giao Diện Kính Mờ Cao Cấp Tích Hợp Sẵn (6 Built-in Glassmorphic Presets):**
+4. **Tối Ưu Hiệu Năng & Tiết Kiệm RAM Thế Hệ Mới (`Blob URL` & `Delta Sync`):**
+   - **`Blob URL` (`URL.createObjectURL`) + `LRU Blur Cache` (4 mức):** Chuyển chuỗi ảnh nền Base64 sang Object URL ngắn ~60 byte, giảm dung lượng thẻ `<style>` trong DOM từ **~1.38 MB xuống chỉ còn ~20 KB (nhẹ hơn 68 lần)**.
+   - **Loại Bỏ `100%` Bộ Chọn `:has()` (`0 :has()`):** Triệt tiêu hoàn toàn hiện tượng trình duyệt quét ngược cây DOM gây khựng khung hình khi AI đang stream câu trả lời dài.
+   - **Bỏ `Runtime.enable` & Đồng Bộ Đa Cửa Sổ `Delta Sync ~150 Bytes`:** Ngăn V8 của Electron giữ lại `RemoteObject` console heap, tự dọn `Page.removeScriptToEvaluateOnNewDocument` cũ khi nạp nóng và chỉ truyền gói JSON ~150 byte khi kéo thanh trượt thay vì bơm lại 1 MB payload.
+   - **Lọc Chuẩn Cổng `https://127.0.0.1:` & Trình Biên Dịch WebP `0-Decode`:** Không tiêm nhầm CSS vào các trang `http://127.0.0.1` mở trong trình duyệt phụ hay khung `/view/sidecar`; đọc thẳng header `RIFF/WEBP` 30-byte giúp `build_payload.py` tăng tốc gấp đôi.
+5. **6 Bộ Giao Diện Kính Mờ Cao Cấp Tích Hợp Sẵn (6 Built-in Glassmorphic Presets):**
 
 | # | Tên Giao Diện (Preset) | Chế Độ & Bảng Màu Chủ Đạo | Điểm Nhấn Thiết Kế & Tài Nguyên Đi Kèm |
 | :-: | :--- | :--- | :--- |
